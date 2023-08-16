@@ -10,3 +10,31 @@ cat test.json | jq -c '.[]' | while read item; do
     migName=$(echo "$item" | jq -r '.migName')
     echo "migName: $migName"
 done
+
+
+[
+{
+  "projectname":"hsbc-9553155-ihub-dev",
+  "mig":"False",
+  "region":"europe-west2",
+  "instanceName":"alteryx-instance",
+  "migName":"alteryx_mig_group",
+  "keyName":"powershellscript"
+  },
+  {
+  "projectname":"hsbc-9553155-ihub2-dev",
+  "mig":"True",
+  "region":"europe-west2",
+  "instanceName":"second-instance",
+  "migName":"second_group",
+  "keyName":"second-script"
+  },
+  {
+  "projectname":"hsbc-9553155-ihub3-dev",
+  "mig":"False",
+  "region":"europe-west2",
+  "instanceName":"third-instance",
+  "migName":"third_group",
+  "keyName":"thirfd_powershellscript"
+}
+]
