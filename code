@@ -38,3 +38,32 @@ done
   "keyName":"thirfd_powershellscript"
 }
 ]
+
+
+
+
+# Disable automatic paging file management
+Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' -Name 'PagingFiles' -Value ' '
+
+# Define your custom page file settings (adjust as needed)
+$PageFileSettings = @(
+    "C:\pagefile.sys 2048 4096",   # Drive C: - Initial size: 2048 MB, Maximum size: 4096 MB
+    "D:\pagefile.sys 1024 2048"   # Drive D: - Initial size: 1024 MB, Maximum size: 2048 MB
+    # Add more lines for additional drives as needed
+)
+
+# Set custom page file settings
+$PageFileSettings | ForEach-Object {
+    $pageFile = $_ -split ' '
+    $pageFilePath = $pageFile[0]
+    $initialSize = [int]$pageFile[1]
+    $maximumSize = [int]$pageFile[2]
+    Set-WmiInstance -Class Win32_PageFileSetting -Arguments @{
+        Name = $pageFilePath
+        InitialSize = $initialSize
+        MaximumSize = $maximumSize
+    }
+}
+
+# Display current page file settings
+Get-WmiObject -Class Win32_PageFileUsage | Format-Table -Property Name, CurrentUsage, PeakUsage, Status
