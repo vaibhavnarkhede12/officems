@@ -11,6 +11,19 @@ cat test.json | jq -c '.[]' | while read item; do
     echo "migName: $migName"
 done
 
+# Define the path to your batch file
+$batchFilePath = "C:\path\to\your\batchfile.bat"
+
+# Run the batch file and capture its output
+$output = Invoke-Expression -Command "$batchFilePath 2>&1"
+
+# Display the output
+Write-Host "Batch Script Output:"
+Write-Host $output
+
+
+
+
 
 # Define the path to your batch file
 $batchFilePath = "C:\path\to\your\batchfile.bat"
