@@ -12,6 +12,31 @@ cat test.json | jq -c '.[]' | while read item; do
 done
 
 
+# Define the path to your batch file
+$batchFilePath = "C:\path\to\your\batchfile.bat"
+
+# Start the batch file process and redirect output to variables
+$process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $batchFilePath" -PassThru -RedirectStandardOutput -RedirectStandardError
+
+# Wait for the process to complete
+$process.WaitForExit()
+
+# Read and store the output
+$stdout = $process.StandardOutput.ReadToEnd()
+$stderr = $process.StandardError.ReadToEnd()
+
+# Display the output
+Write-Host "Standard Output:"
+Write-Host $stdout
+Write-Host "Standard Error:"
+Write-Host $stderr
+
+
+
+
+
+
+
 [
 {
   "projectname":"hsbc-9553155-ihub-dev",
