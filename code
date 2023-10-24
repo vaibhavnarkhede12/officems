@@ -1,3 +1,23 @@
+
+# Read the JSON file
+$jsonData = Get-Content -Path "config.json" | ConvertFrom-Json
+
+# Add the "DNS" field to the "auto-certs" section
+$jsonData.'auto-certs'.'DNS' = "your_dns_value"
+
+# Convert the modified data back to JSON
+$jsonString = $jsonData | ConvertTo-Json -Depth 10
+
+# Save the updated JSON back to the file
+$jsonString | Set-Content -Path "config.json"
+
+
+
+
+
+
+
+
 cat test.json | jq -c '.[]' | while read item; do
     projectname=$(echo "$item" | jq -r '.projectname')
     echo "projectname: $projectname"
