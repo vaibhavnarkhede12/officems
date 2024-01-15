@@ -22,3 +22,36 @@ Deal of the day: Urban Space 100% Cotton Curtains for Window, Room Darkening Cur
 
 
 HUESLAND Cotton Curtains for Windows, 5 feet Long 1 Bohemian Eyelet Curtain (Window 5 x 4 ft, Green Leaf Floral) https://amzn.eu/d/8SEn47J
+
+
+# /etc/google-fluentd/config.d/custom-logging.conf
+
+<source>
+  @type tail
+  format none
+  path /opt/logs/*.log
+  pos_file /var/lib/google-fluentd/pos/custom-logging.pos
+  tag custom-logs
+</source>
+
+<filter custom-logs>
+  @type grep
+  <regexp>
+    key log
+    pattern marked as failure
+  </regexp>
+</filter>
+
+<match custom-logs>
+  @type google_cloud
+  buffer_type file
+  buffer_path /var/lib/google-fluentd/buffers/custom-logs
+  log_level info
+  flush_interval 5s
+  retry_limit 5
+  num_threads 2
+  time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+  utc
+  default_resource_type global
+  detect_subservice true
+</match>
