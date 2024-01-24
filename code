@@ -9,6 +9,22 @@
   tag custom-logs
 </source>
 
+#!/bin/bash
+
+# List of GCP project IDs
+projects=("project1" "project2" "project3")
+
+# GCP asset inventory query command
+query_command="gcloud asset search-all-resources --format=json"
+
+for project in "${projects[@]}"; do
+    echo "Running inventory query for $project"
+
+    # Run the asset inventory query for each project
+    eval "$query_command --project=$project"
+done
+
+
 <filter custom-logs>
   @type grep
   <regexp>
