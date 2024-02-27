@@ -18,6 +18,9 @@ ssl_protocols TLSv1.2;
 find /var/lib/jenkins/jobs -type f -name config.xml -exec grep -q "<definition class=\"org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition\">" {} \; -print | wc -l
 
 
+find /var/lib/jenkins/jobs -type f -name config.xml -exec grep -E -l "(<flowDefinition>|<org.jenkinsci.plugins.workflow.job.WorkflowJob>)" {} + | wc -l
+
+
 
 Deal of the day: Urban Space 100% Cotton Curtains for Window, Room Darkening Curtains 5 feet Long with Eyelets, Set of 2 Curtains with Tieback (Passion Flower Pink, Window -5 Feet X 4 Feet) https://amzn.eu/d/doT3GlV
 
