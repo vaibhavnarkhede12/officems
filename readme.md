@@ -1,6 +1,40 @@
 
 
 
+
+import com.cloudbees.plugins.credentials.CredentialsProvider
+import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials
+
+// Replace 'YOUR_CREDENTIAL_ID' with the ID of your SSH Username with private key credential
+def credentialId = 'YOUR_CREDENTIAL_ID'
+
+// Retrieve the credential by its ID
+def creds = CredentialsProvider.lookupCredentials(
+    StandardUsernameCredentials.class,
+    Jenkins.instance,
+    null,
+    null
+).find { it.id == credentialId }
+
+if (creds != null) {
+    println "Credential ID: ${creds.id}"
+    println "Username: ${creds.username}"
+    // If you want to retrieve the private key, you need to cast the credential to the appropriate type
+    if (creds instanceof com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey) {
+        def privateKey = creds.getPrivateKey()
+        println "Private Key: ${privateKey}"
+    } else {
+        println "This credential is not of type SSH Username with private key."
+    }
+} else {
+    println "Credential with ID ${credentialId} not found."
+}
+
+
+
+
+
+
 import com.cloudbees.plugins.credentials.*
 import com.cloudbees.plugins.credentials.domains.*
 
