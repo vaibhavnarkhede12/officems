@@ -1,6 +1,12 @@
 
 
 
+gcloud compute machine-types describe n1-standard-4 --format="csv[no-heading](guestCpus,memoryMb)"
+
+
+gcloud compute machine-types list --filter="guestCpus=2 AND memoryMb=2048"
+
+
 
 import com.cloudbees.plugins.credentials.CredentialsProvider
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials
