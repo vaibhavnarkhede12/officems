@@ -1,0 +1,40 @@
+import jenkins.model.*
+import com.cloudbees.plugins.credentials.*
+import com.cloudbees.plugins.credentials.common.*
+
+// Folder name and credentials ID
+def folderName = 'MyFolder'
+def credentialsId = 'my-credentials-id'
+
+// Get the Jenkins instance
+def jenkinsInstance = Jenkins.getInstance()
+
+// Find the folder
+def folder = jenkinsInstance.getItemByFullName(folderName)
+
+// Ensure the folder exists
+if (folder) {
+    // Get the credentials from the folder
+    def credsStore = folder.getProperties().get(com.cloudbees.hudson.plugins.folder.properties.FolderCredentialsProperty.class)
+    
+    if (credsStore) {
+        // Find the credentials by ID
+        def credentials = credsStore.getCredentials(Credentials.class).find { it.id == credentialsId }
+        
+        if (credentials instanceof UsernamePasswordCredentials) {
+            // Extract username and password
+            def username = credentials.username
+            def password = credentials.password.getPlainText()
+            
+            // Print the username and password
+            println "Username: ${username}"
+            println "Password: ${password}"
+        } else {
+            println "Credentials not found or not of type UsernamePasswordCredentials."
+        }
+    } else {
+        println "Folder does not have any credentials property."
+    }
+} else {
+    println "Folder not found."
+}
