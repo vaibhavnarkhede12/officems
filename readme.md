@@ -9,6 +9,16 @@ gcloud compute machine-types list --filter="guestCpus=2 AND memoryMb=2048"
 gcloud alpha compute instances estimate-cost --machine-type=YOUR_MACHINE_TYPE --zone=YOUR_ZONE --billing-period=1M
 
 
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE pid <> pg_backend_pid()
+  AND datname = 'dbname';  -- replace 'dbname' with your database name
+
+
+
+
+
+
 PROJECT_ID=$(curl -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id")
 echo $PROJECT_ID
 
