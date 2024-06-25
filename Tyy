@@ -1,40 +1,64 @@
-import jenkins.model.*
-import com.cloudbees.plugins.credentials.*
-import com.cloudbees.plugins.credentials.common.*
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30800
+    name: web
+  type: LoadBalancer
+  selector:
+    app: nginx
 
-// Folder name and credentials ID
-def folderName = 'MyFolder'
-def credentialsId = 'my-credentials-id'
+---
 
-// Get the Jenkins instance
-def jenkinsInstance = Jenkins.getInstance()
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  serviceName: nginx
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 2
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+    spec:
+      volumes:
+      - name: nginx-pvc
+        persistentVolumeClaim:
+          claimName: nginx-pvc
+      containers:
+      - name: nginx
+        image: registry.k8s.io/nginx-slim:0.8
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+          - name: nginx-pvc
+            mountPath: /usr/share/nginx/html
+      
 
-// Find the folder
-def folder = jenkinsInstance.getItemByFullName(folderName)
-
-// Ensure the folder exists
-if (folder) {
-    // Get the credentials from the folder
-    def credsStore = folder.getProperties().get(com.cloudbees.hudson.plugins.folder.properties.FolderCredentialsProperty.class)
-    
-    if (credsStore) {
-        // Find the credentials by ID
-        def credentials = credsStore.getCredentials(Credentials.class).find { it.id == credentialsId }
-        
-        if (credentials instanceof UsernamePasswordCredentials) {
-            // Extract username and password
-            def username = credentials.username
-            def password = credentials.password.getPlainText()
-            
-            // Print the username and password
-            println "Username: ${username}"
-            println "Password: ${password}"
-        } else {
-            println "Credentials not found or not of type UsernamePasswordCredentials."
-        }
-    } else {
-        println "Folder does not have any credentials property."
-    }
-} else {
-    println "Folder not found."
-}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nginx-pvc
+spec:
+  storageClassName: standard
+  accessModes: 
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
