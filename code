@@ -1,226 +1,48 @@
-
-import com.cloudbees.plugins.credentials.CredentialsProvider
-import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials
-
-// Replace 'YOUR_CREDENTIAL_ID' with the ID of your SSH Username with private key credential
-def credentialId = 'YOUR_CREDENTIAL_ID'
-
-// Retrieve the credential by its ID
-def creds = CredentialsProvider.lookupCredentials(
-    StandardUsernameCredentials.class,
-    Jenkins.instance,
-    null,
-    null
-).find { it.id == credentialId }
-
-if (creds != null) {
-    println "Credential ID: ${creds.id}"
-    println "Username: ${creds.username}"
-    // If you want to retrieve the private key, you need to cast the credential to the appropriate type
-    if (creds instanceof com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey) {
-        def privateKey = creds.getPrivateKey()
-        println "Private Key: ${privateKey}"
-    } else {
-        println "This credential is not of type SSH Username with private key."
-    }
-} else {
-    println "Credential with ID ${credentialId} not found."
-}
-
-
-
-
-
-
-
-
-
-
-
-
-# /etc/google-fluentd/config.d/custom-logging.conf
-
-<source>
-  @type tail
-  format none
-  path /opt/logs/*.log
-  pos_file /var/lib/google-fluentd/pos/custom-logging.pos
-  tag custom-logs
-</source>
-
-#!/bin/bash
-
-# List of GCP project IDs
-projects=("project1" "project2" "project3")
-
-# GCP asset inventory query command
-query_command="gcloud asset search-all-resources --format=json"
-
-for project in "${projects[@]}"; do
-    echo "Running inventory query for $project"
-
-    # Run the asset inventory query for each project
-    eval "$query_command --project=$project"
-done
-
-
-<filter custom-logs>
-  @type grep
-  <regexp>
-    key log
-    pattern marked as failure
-  </regexp>
-</filter>
-
-<match custom-logs>
-  @type google_cloud
-  buffer_type file
-  buffer_path /var/lib/google-fluentd/buffers/custom-logs
-  log_level info
-  flush_interval 5s
-  retry_limit 5
-  num_threads 2
-  time_format "%Y-%m-%dT%H:%M:%S.%NZ"
-  utc
-  default_resource_type global
-  detect_subservice true
-</match>
-
-
-
-
-curl -X POST -u your_personal_access_token:x-oauth-basic \
-  -H "Accept: application/vnd.github.v3+json" \
-  https://api.github.com/repos/{owner}/{repo}/pulls/{pull_request_number}/reviews \
-  -d '{
-    "event": "APPROVE"
-  }'
-
-
-
-# Read the JSON file
-$jsonData = Get-Content -Path "config.json" | ConvertFrom-Json
-
-# Add the "DNS" field to the "auto-certs" section
-$jsonData.'auto-certs'.'DNS' = "your_dns_value"
-
-# Convert the modified data back to JSON
-$jsonString = $jsonData | ConvertTo-Json -Depth 10
-
-# Save the updated JSON back to the file
-$jsonString | Set-Content -Path "config.json"
-
-
-
-
-
-
-
-
-cat test.json | jq -c '.[]' | while read item; do
-    projectname=$(echo "$item" | jq -r '.projectname')
-    echo "projectname: $projectname"
-    mig=$(echo "$item" | jq -r '.mig')
-    echo "mig: $mig"
-    region=$(echo "$item" | jq -r '.region')
-    echo "region: $region"
-    instanceName=$(echo "$item" | jq -r '.instanceName')
-    echo "instanceName: $instanceName"
-    migName=$(echo "$item" | jq -r '.migName')
-    echo "migName: $migName"
-done
-
-# Define the path to your batch file
-$batchFilePath = "C:\path\to\your\batchfile.bat"
-
-# Run the batch file and capture its output
-$output = Invoke-Expression -Command "$batchFilePath 2>&1"
-
-# Display the output
-Write-Host "Batch Script Output:"
-Write-Host $output
-
-
-
-
-
-# Define the path to your batch file
-$batchFilePath = "C:\path\to\your\batchfile.bat"
-
-# Start the batch file process and redirect output to variables
-$process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $batchFilePath" -PassThru -RedirectStandardOutput -RedirectStandardError
-
-# Wait for the process to complete
-$process.WaitForExit()
-
-# Read and store the output
-$stdout = $process.StandardOutput.ReadToEnd()
-$stderr = $process.StandardError.ReadToEnd()
-
-# Display the output
-Write-Host "Standard Output:"
-Write-Host $stdout
-Write-Host "Standard Error:"
-Write-Host $stderr
-
-
-
-
-
-
-
-[
-{
-  "projectname":"hsbc-9553155-ihub-dev",
-  "mig":"False",
-  "region":"europe-west2",
-  "instanceName":"alteryx-instance",
-  "migName":"alteryx_mig_group",
-  "keyName":"powershellscript"
-  },
-  {
-  "projectname":"hsbc-9553155-ihub2-dev",
-  "mig":"True",
-  "region":"europe-west2",
-  "instanceName":"second-instance",
-  "migName":"second_group",
-  "keyName":"second-script"
-  },
-  {
-  "projectname":"hsbc-9553155-ihub3-dev",
-  "mig":"False",
-  "region":"europe-west2",
-  "instanceName":"third-instance",
-  "migName":"third_group",
-  "keyName":"thirfd_powershellscript"
-}
-]
-
-
-
-
-# Disable automatic paging file management
-Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' -Name 'PagingFiles' -Value ' '
-
-# Define your custom page file settings (adjust as needed)
-$PageFileSettings = @(
-    "C:\pagefile.sys 2048 4096",   # Drive C: - Initial size: 2048 MB, Maximum size: 4096 MB
-    "D:\pagefile.sys 1024 2048"   # Drive D: - Initial size: 1024 MB, Maximum size: 2048 MB
-    # Add more lines for additional drives as needed
-)
-
-# Set custom page file settings
-$PageFileSettings | ForEach-Object {
-    $pageFile = $_ -split ' '
-    $pageFilePath = $pageFile[0]
-    $initialSize = [int]$pageFile[1]
-    $maximumSize = [int]$pageFile[2]
-    Set-WmiInstance -Class Win32_PageFileSetting -Arguments @{
-        Name = $pageFilePath
-        InitialSize = $initialSize
-        MaximumSize = $maximumSize
-    }
-}
-
-# Display current page file settings
-Get-WmiObject -Class Win32_PageFileUsage | Format-Table -Property Name, CurrentUsage, PeakUsage, Status
+import requests
+from requests.auth import HTTPBasicAuth
+
+# Jenkins server URL
+JENKINS_URL = 'https://myjenkins.fg.hk/api/json'
+# Jenkins username and password/API token
+USERNAME = 'your-username'
+PASSWORD = 'your-password-or-api-token'
+
+response = requests.get(JENKINS_URL, auth=HTTPBasicAuth(USERNAME, PASSWORD), verify=False)
+
+print(response.status_code)
+print(response.text)
+
+# Check if the response is valid JSON
+try:
+    data = response.json()
+    print(data)
+except ValueError:
+    print("Invalid JSON response")
+
+import jenkins
+import requests
+
+# Jenkins server URL
+JENKINS_URL = 'https://myjenkins.fg.hk/'
+# Jenkins username and password/API token
+USERNAME = 'your-username'
+PASSWORD = 'your-password-or-api-token'
+
+# Disable SSL warnings (optional, if using self-signed certificates)
+requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+try:
+    # Initialize Jenkins server connection with SSL verification disabled
+    server = jenkins.Jenkins(JENKINS_URL, username=USERNAME, password=PASSWORD, ssl_verify=False)
+    
+    # Fetch all jobs
+    jobs = server.get_all_jobs()
+    
+    # Print job names
+    for job in jobs:
+        print(job['name'])
+
+except jenkins.JenkinsException as e:
+    print(f"Failed to connect to Jenkins: {e}")
+except requests.exceptions.RequestException as e:
+    print(f"Request error: {e}")
