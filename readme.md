@@ -10,6 +10,72 @@ for dataset in datasets:
     for table in tables:
         print(f'  Table: {table.table_id}')
 
+import jenkins
+import requests
+
+# Jenkins server URL
+JENKINS_URL = 'https://myjenkins.fg.hk/'
+# Jenkins username and password/API token
+USERNAME = 'your-username'
+PASSWORD = 'your-password-or-api-token'
+
+# Disable SSL warnings (optional, if using self-signed certificates)
+requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+try:
+    # Initialize Jenkins server connection with SSL verification disabled
+    server = jenkins.Jenkins(JENKINS_URL, username=USERNAME, password=PASSWORD, ssl_verify=False)
+    
+    # Fetch all jobs
+    jobs = server.get_all_jobs()
+    
+    # Print job names
+    for job in jobs:
+        print(job['name'])
+
+except jenkins.JenkinsException as e:
+    print(f"Failed to connect to Jenkins: {e}")
+except requests.exceptions.RequestException as e:
+    print(f"Request error: {e}")
+
+
+
+    
+
+
+
+
+
+https://myjenkins.fg.hk/
+
+
+
+import requests
+from requests.auth import HTTPBasicAuth
+
+# Jenkins server URL
+JENKINS_URL = 'https://myjenkins.fg.hk/api/json'
+# Jenkins username and password/API token
+USERNAME = 'your-username'
+PASSWORD = 'your-password-or-api-token'
+
+response = requests.get(JENKINS_URL, auth=HTTPBasicAuth(USERNAME, PASSWORD), verify=False)
+
+print(response.status_code)
+print(response.text)
+
+# Check if the response is valid JSON
+try:
+    data = response.json()
+    print(data)
+except ValueError:
+    print("Invalid JSON response")
+
+
+
+
+
+
 
 
         Certainly! Here’s a brief writeup for referring a DevOps engineer with expertise in automation, Python, Terraform, GCP, and Linux:
