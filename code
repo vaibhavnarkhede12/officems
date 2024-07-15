@@ -94,3 +94,30 @@ for node in nodes:
     else:
         print(f"Node {node_name} is running jobs.")
 
+
+
+
+84747747474747474
+import requests
+import json
+
+# Jenkins details
+jenkins_url = "http://your-jenkins-url"
+username = "your-username"
+api_token = "your-api-token"
+
+# Get the list of nodes (slaves)
+nodes_url = f"{jenkins_url}/computer/api/json"
+response = requests.get(nodes_url, auth=(username, api_token))
+nodes = response.json()['computer']
+
+# Check each node's idle status and mark offline if idle
+for node in nodes:
+    node_name = node['displayName']
+    is_idle = node['idle']
+    if is_idle:
+        print(f"Node {node_name} is idle. Marking it offline.")
+        mark_offline_url = f"{jenkins_url}/computer/{node_name}/toggleOffline?offlineMessage=Marked%20offline%20by%20script"
+        requests.post(mark_offline_url, auth=(username, api_token))
+    else:
+        print(f"Node {node_name} is running jobs.")
