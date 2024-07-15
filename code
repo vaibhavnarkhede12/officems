@@ -121,3 +121,36 @@ for node in nodes:
         requests.post(mark_offline_url, auth=(username, api_token))
     else:
         print(f"Node {node_name} is running jobs.")
+
+
+
+
+pipeline {
+    agent none // No default agent, as we'll specify the node explicitly
+
+    parameters {
+        string(name: 'nodeName', description: 'Name of the Jenkins node to check')
+    }
+
+    stages {
+        stage('Check Node Status') {
+            agent { label "${params.nodeName}" } // Run this stage on the specified node
+
+            steps {
+                script {
+                    def node = Jenkins.instance.getNode(params.nodeName)
+                    if (node) {
+                        def computer = node.toComputer()
+                        if (computer.countBusy() > 0) {
+                            echo "Node ${params.nodeName} is running ${computer.countBusy()} jobs."
+                        } else {
+                            echo "Node ${params.nodeName} is idle."
+                        }
+                    } else {
+                        error "Node ${params.nodeName} not found."
+                    }
+                }
+            }
+        }
+    }
+}
