@@ -46,3 +46,51 @@ except jenkins.JenkinsException as e:
     print(f"Failed to connect to Jenkins: {e}")
 except requests.exceptions.RequestException as e:
     print(f"Request error: {e}")
+
+
+
+848484848483888import requests
+import json
+
+# Jenkins details
+jenkins_url = "http://your-jenkins-url"
+username = "your-username"
+api_token = "your-api-token"
+
+# Get the list of nodes (slaves)
+nodes_url = f"{jenkins_url}/computer/api/json"
+response = requests.get(nodes_url, auth=(username, api_token))
+nodes = response.json()['computer']
+
+# Check each node's idle status
+for node in nodes:
+    node_name = node['displayName']
+    is_idle = node['idle']
+    if is_idle:
+        print(f"Node {node_name} is idle.")
+    else:
+        print(f"Node {node_name} is running jobs.")889
+
+
+import requests
+import json
+
+# Jenkins details
+jenkins_url = "http://your-jenkins-url"
+username = "your-username"
+api_token = "your-api-token"
+
+# Get the list of nodes (slaves)
+nodes_url = f"{jenkins_url}/computer/api/json"
+response = requests.get(nodes_url, auth=(username, api_token))
+nodes = response.json()['computer']
+
+# Check each node's idle status
+for node in nodes:
+    node_name = node['displayName']
+    is_idle = node['idle']
+    if is_idle:
+        print(f"Node {node_name} is idle.")
+    else:
+        print(f"Node {node_name} is running jobs.")
+
