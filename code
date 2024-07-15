@@ -1,154 +1,18 @@
-import requests
-from requests.auth import HTTPBasicAuth
-
-# Jenkins server URL
-JENKINS_URL = 'https://myjenkins.fg.hk/api/json'
-# Jenkins username and password/API token
-USERNAME = 'your-username'
-PASSWORD = 'your-password-or-api-token'
-
-response = requests.get(JENKINS_URL, auth=HTTPBasicAuth(USERNAME, PASSWORD), verify=False)
-
-print(response.status_code)
-print(response.text)
-
-# Check if the response is valid JSON
-try:
-    data = response.json()
-    print(data)
-except ValueError:
-    print("Invalid JSON response")
-
-import jenkins
-import requests
-
-# Jenkins server URL
-JENKINS_URL = 'https://myjenkins.fg.hk/'
-# Jenkins username and password/API token
-USERNAME = 'your-username'
-PASSWORD = 'your-password-or-api-token'
-
-# Disable SSL warnings (optional, if using self-signed certificates)
-requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
-
-try:
-    # Initialize Jenkins server connection with SSL verification disabled
-    server = jenkins.Jenkins(JENKINS_URL, username=USERNAME, password=PASSWORD, ssl_verify=False)
-    
-    # Fetch all jobs
-    jobs = server.get_all_jobs()
-    
-    # Print job names
-    for job in jobs:
-        print(job['name'])
-
-except jenkins.JenkinsException as e:
-    print(f"Failed to connect to Jenkins: {e}")
-except requests.exceptions.RequestException as e:
-    print(f"Request error: {e}")
-
-
-
-848484848483888import requests
-import json
-
-# Jenkins details
-jenkins_url = "http://your-jenkins-url"
-username = "your-username"
-api_token = "your-api-token"
-
-# Get the list of nodes (slaves)
-nodes_url = f"{jenkins_url}/computer/api/json"
-response = requests.get(nodes_url, auth=(username, api_token))
-nodes = response.json()['computer']
-
-# Check each node's idle status
-for node in nodes:
-    node_name = node['displayName']
-    is_idle = node['idle']
-    if is_idle:
-        print(f"Node {node_name} is idle.")
-    else:
-        print(f"Node {node_name} is running jobs.")889
-
-
-import requests
-import json
-
-# Jenkins details
-jenkins_url = "http://your-jenkins-url"
-username = "your-username"
-api_token = "your-api-token"
-
-# Get the list of nodes (slaves)
-nodes_url = f"{jenkins_url}/computer/api/json"
-response = requests.get(nodes_url, auth=(username, api_token))
-nodes = response.json()['computer']
-
-# Check each node's idle status
-for node in nodes:
-    node_name = node['displayName']
-    is_idle = node['idle']
-    if is_idle:
-        print(f"Node {node_name} is idle.")
-    else:
-        print(f"Node {node_name} is running jobs.")
-
-
-
-
-84747747474747474
-import requests
-import json
-
-# Jenkins details
-jenkins_url = "http://your-jenkins-url"
-username = "your-username"
-api_token = "your-api-token"
-
-# Get the list of nodes (slaves)
-nodes_url = f"{jenkins_url}/computer/api/json"
-response = requests.get(nodes_url, auth=(username, api_token))
-nodes = response.json()['computer']
-
-# Check each node's idle status and mark offline if idle
-for node in nodes:
-    node_name = node['displayName']
-    is_idle = node['idle']
-    if is_idle:
-        print(f"Node {node_name} is idle. Marking it offline.")
-        mark_offline_url = f"{jenkins_url}/computer/{node_name}/toggleOffline?offlineMessage=Marked%20offline%20by%20script"
-        requests.post(mark_offline_url, auth=(username, api_token))
-    else:
-        print(f"Node {node_name} is running jobs.")
-
-
-
-
 pipeline {
-    agent none // No default agent, as we'll specify the node explicitly
+    agent any
 
-    parameters {
-        string(name: 'nodeName', description: 'Name of the Jenkins node to check')
+    environment {
+        jenkinsurl = "" // Define initial value for jenkinsurl
     }
 
     stages {
-        stage('Check Node Status') {
-            agent { label "${params.nodeName}" } // Run this stage on the specified node
-
+        stage('stage1') {
             steps {
                 script {
-                    def node = Jenkins.instance.getNode(params.nodeName)
-                    if (node) {
-                        def computer = node.toComputer()
-                        if (computer.countBusy() > 0) {
-                            echo "Node ${params.nodeName} is running ${computer.countBusy()} jobs."
-                        } else {
-                            echo "Node ${params.nodeName} is idle."
-                        }
-                    } else {
-                        error "Node ${params.nodeName} not found."
-                    }
+                    // Set jenkinsurl to "vaibhav"
+                    env.jenkinsurl = "vaibhav"
+                    // Print jenkinsurl using echo
+                    echo "Value of jenkinsurl in stage1: ${env.jenkinsurl}"
                 }
             }
         }
