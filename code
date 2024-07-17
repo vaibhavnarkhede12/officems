@@ -24,21 +24,34 @@ pipeline {
                 }
             }
         }
-        stage('Resize MIG to 0') {
+        stage('Resize MIG') {
             steps {
                 script {
-                    sh """
-                        gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 0
-                    """
-                }
-            }
-        }
-        stage('Resize MIG to 1') {
-            steps {
-                script {
-                    sh """
-                        gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 1
-                    """
+                    def resizeToZero = sh(
+                        script: """
+                            gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 0
+                        """,
+                        returnStatus: true
+                    )
+                    if (resizeToZero != 0) {
+                        error "Failed to resize MIG ${MIG_NAME} to 0."
+                    } else {
+                        echo "Successfully resized MIG ${MIG_NAME} to 0."
+                    }
+                    
+                    sleep(time: 2, unit: 'MINUTES')
+                    
+                    def resizeToOne = sh(
+                        script: """
+                            gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 1
+                        """,
+                        returnStatus: true
+                    )
+                    if (resizeToOne != 0) {
+                        error "Failed to resize MIG ${MIG_NAME} back to 1."
+                    } else {
+                        echo "Successfully resized MIG ${MIG_NAME} back to 1."
+                    }
                 }
             }
         }
