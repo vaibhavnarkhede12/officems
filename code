@@ -1,32 +1,10 @@
 pipeline {
     agent any
-
-    environment {
-        jenkinsurl = "" // Define initial value for jenkinsurl
-    }
-
-    stages {
-        stage('stage1') {
-            steps {
-                script {
-                    // Set jenkinsurl to "vaibhav"
-                    env.jenkinsurl = "vaibhav"
-                    // Print jenkinsurl using echo
-                    echo "Value of jenkinsurl in stage1: ${env.jenkinsurl}"
-                }
-            }
-        }
-    }
-}
-
-
-
-
-pipeline {
-    agent any
     environment {
         IMAGE_FAMILY = 'your-image-family'
         IMAGE_PROJECT = 'your-image-project'
+        MIG_NAME = 'your-mig-name'
+        MIG_ZONE = 'your-mig-zone'
     }
     stages {
         stage('Check GCP Image') {
@@ -43,6 +21,24 @@ pipeline {
                     } else {
                         error "No image found in the family ${IMAGE_FAMILY}."
                     }
+                }
+            }
+        }
+        stage('Resize MIG to 0') {
+            steps {
+                script {
+                    sh """
+                        gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 0
+                    """
+                }
+            }
+        }
+        stage('Resize MIG to 1') {
+            steps {
+                script {
+                    sh """
+                        gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 1
+                    """
                 }
             }
         }
