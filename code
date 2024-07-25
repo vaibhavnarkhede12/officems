@@ -1,59 +1,42 @@
-pipeline {
-    agent any
-    environment {
-        IMAGE_FAMILY = 'your-image-family'
-        IMAGE_PROJECT = 'your-image-project'
-        MIG_NAME = 'your-mig-name'
-        MIG_ZONE = 'your-mig-zone'
-    }
-    stages {
-        stage('Check GCP Image') {
-            steps {
-                script {
-                    def result = sh(
-                        script: """
-                            gcloud compute images list --filter="family:${IMAGE_FAMILY}" --project=${IMAGE_PROJECT} --format="get(name)" --limit=1
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    if (result) {
-                        echo "An image exists in the family ${IMAGE_FAMILY}."
-                    } else {
-                        error "No image found in the family ${IMAGE_FAMILY}."
-                    }
-                }
-            }
-        }
-        stage('Resize MIG') {
-            steps {
-                script {
-                    def resizeToZero = sh(
-                        script: """
-                            gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 0
-                        """,
-                        returnStatus: true
-                    )
-                    if (resizeToZero != 0) {
-                        error "Failed to resize MIG ${MIG_NAME} to 0."
-                    } else {
-                        echo "Successfully resized MIG ${MIG_NAME} to 0."
-                    }
-                    
-                    sleep(time: 2, unit: 'MINUTES')
-                    
-                    def resizeToOne = sh(
-                        script: """
-                            gcloud compute instance-groups managed resize ${MIG_NAME} --zone ${MIG_ZONE} --size 1
-                        """,
-                        returnStatus: true
-                    )
-                    if (resizeToOne != 0) {
-                        error "Failed to resize MIG ${MIG_NAME} back to 1."
-                    } else {
-                        echo "Successfully resized MIG ${MIG_NAME} back to 1."
-                    }
-                }
-            }
-        }
-    }
-}
+import csv
+from jenkinsapi.jenkins import Jenkins
+
+# Replace with your Jenkins server URL and credentials
+jenkins_url = 'http://your-jenkins-server'
+username = 'your-username'
+password = 'your-password'
+
+def get_jenkins_instance(url, user, pwd):
+    return Jenkins(url, username=user, password=pwd)
+
+def fetch_job_data(jenkins):
+    job_data = []
+
+    for job_name, job_instance in jenkins.get_jobs_recursive():
+        job_info = job_instance._data
+        last_build = job_instance.get_last_build_or_none()
+        last_build_info = last_build.get_data() if last_build else {}
+        
+        job_data.append({
+            'Job Name': job_name,
+            'Last Run User': last_build_info.get('actions', [{}])[0].get('causes', [{}])[0].get('userId', 'N/A'),
+            'Last Run Time': last_build_info.get('timestamp', 'N/A'),
+            'Enabled': not job_instance.is_disabled()
+        })
+
+    return job_data
+
+def save_to_csv(data, filename='jenkins_jobs.csv'):
+    keys = data[0].keys() if data else ['Job Name', 'Last Run User', 'Last Run Time', 'Enabled']
+    with open(filename, 'w', newline='') as output_file:
+        dict_writer = csv.DictWriter(output_file, fieldnames=keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(data)
+
+def main():
+    jenkins = get_jenkins_instance(jenkins_url, username, password)
+    job_data = fetch_job_data(jenkins)
+    save_to_csv(job_data)
+
+if __name__ == '__main__':
+    main()
