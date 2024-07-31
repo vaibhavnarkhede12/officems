@@ -3,6 +3,9 @@ pipeline {
     parameters {
         string(name: 'CHANGE_ID', defaultValue: '', description: 'Enter the change or incident ID')
     }
+    environment {
+        CREDENTIALS_ID = 'your-credentials-id'  // Replace with the actual ID of your credentials
+    }
     stages {
         stage('Check String and Execute Curl') {
             steps {
@@ -10,8 +13,10 @@ pipeline {
                     def changeId = params.CHANGE_ID
                     if (changeId.startsWith('CHG')) {
                         echo "Executing curl command for change ID: ${changeId}"
-                        def result = sh(script: "curl -u nebula:system https://ice.it.bc/ice/api/V2/changes/${changeId}", returnStdout: true).trim()
-                        echo "Curl result: ${result}"
+                        withCredentials([usernamePassword(credentialsId: env.CREDENTIALS_ID, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                            def result = sh(script: "curl -u ${USERNAME}:${PASSWORD} https://ice.it.bc/ice/api/V2/changes/${changeId}", returnStdout: true).trim()
+                            echo "Curl result: ${result}"
+                        }
                     } else if (changeId.startsWith('IN')) {
                         echo "The ID starts with 'IN'. No curl command executed."
                     } else {
