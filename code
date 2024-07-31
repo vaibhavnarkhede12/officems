@@ -16,6 +16,72 @@ pipeline {
                         withCredentials([usernamePassword(credentialsId: env.CREDENTIALS_ID, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                             def result = sh(script: "curl -u ${USERNAME}:${PASSWORD} https://ice.it.bc/ice/api/V2/changes/${changeId}", returnStdout: true).trim()
                             echo "Curl result: ${result}"
+
+                            def jsonSlurper = new groovy.json.JsonSlurper()
+                            def parsedResult = jsonSlurper.parseText(result)
+
+                            // Assuming you want to extract a parameter named 'parameterName'
+                            def parameterValue = parsedResult.parameterName
+                            echo "Extracted parameter value: ${parameterValue}"
+
+                            // Trigger another pipeline
+                            build job: 'another-pipeline-job-name'  // Replace with the actual job name
+                        }
+                    } else if (changeId.startsWith('IN')) {
+                        echo "The ID starts with 'IN'. No curl command executed."
+                    } else {
+                        echo "The ID does not start with 'CHG' or 'IN'. No action taken."
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+788888776543
+
+pipeline {
+    agent any
+    parameters {
+        string(name: 'CHANGE_ID', defaultValue: '', description: 'Enter the change or incident ID')
+    }
+    environment {
+        CREDENTIALS_ID = 'your-credentials-id'  // Replace with the actual ID of your credentials
+    }
+    stages {
+        stage('Check String and Execute Curl') {
+            steps {
+                script {
+                    def changeId = params.CHANGE_ID
+                    if (changeId.startsWith('CHG')) {
+                        echo "Executing curl command for change ID: ${changeId}"
+                        withCredentials([usernamePassword(credentialsId: env.CREDENTIALS_ID, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                            def result = sh(script: "curl -u ${USERNAME}:${PASSWORD} https://ice.it.bc/ice/api/V2/changes/${changeId}", returnStdout: true).trim()
+                            echo "Curl result: ${result}"
+
+                            def jsonSlurper = new groovy.json.JsonSlurper()
+                            def parsedResult = jsonSlurper.parseText(result)
+
+                            // Assuming you want to extract a parameter named 'parameterName'
+                            def parameterValue = parsedResult.parameterName
+                            echo "Extracted parameter value: ${parameterValue}"
+
+                            // Trigger another pipeline with parameters
+                            build job: 'another-pipeline-job-name', parameters: [
+                                string(name: 'PARAM_NAME', value: parameterValue)
+                            ]  // Replace with the actual job name and parameter names
                         }
                     } else if (changeId.startsWith('IN')) {
                         echo "The ID starts with 'IN'. No curl command executed."
