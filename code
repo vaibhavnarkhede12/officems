@@ -48,3 +48,28 @@ pipeline {
         }
     }
 }
+
+
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Extract Credentials') {
+            steps {
+                script {
+                    withCredentials([file(credentialsId: 'aa_11', variable: 'SA_KEY_FILE')]) {
+                        // You can now use the SA_KEY_FILE variable to reference the service account key file
+                        echo "Service account key file path: ${SA_KEY_FILE}"
+                        
+                        // For example, you might want to copy the key file to a specific location
+                        sh 'cp $SA_KEY_FILE /path/to/destination'
+                        
+                        // Or use it directly in a command
+                        sh 'cat $SA_KEY_FILE'
+                    }
+                }
+            }
+        }
+    }
+}
