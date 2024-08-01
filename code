@@ -1,72 +1,24 @@
 pipeline {
     agent any
-    parameters {
-        string(name: 'CHANGE_ID', defaultValue: '', description: 'Enter the change or incident ID')
-        string(name: 'JOB_NAME', defaultValue: '', description: 'Enter the job name to trigger')
-        string(name: 'PARAMS', defaultValue: '', description: 'Enter parameters to pass to the job in JSON format')
-    }
-    environment {
-        CREDENTIALS_ID = 'your-credentials-id'  // Replace with the actual ID of your credentials
-    }
-    stages {
-        stage('Check String and Execute Curl') {
-            steps {
-                script {
-                    def changeId = params.CHANGE_ID
-                    def jobName = params.JOB_NAME
-                    def paramsJson = params.PARAMS
-
-                    if (changeId.startsWith('CHG')) {
-                        echo "Executing curl command for change ID: ${changeId}"
-                        withCredentials([usernamePassword(credentialsId: env.CREDENTIALS_ID, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                            def result = sh(script: "curl -u ${USERNAME}:${PASSWORD} https://ice.it.bc/ice/api/V2/changes/${changeId}", returnStdout: true).trim()
-                            echo "Curl result: ${result}"
-
-                            def jsonSlurper = new groovy.json.JsonSlurper()
-                            def parsedResult = jsonSlurper.parseText(result)
-
-                            // Assuming you want to extract a parameter named 'parameterName'
-                            def parameterValue = parsedResult.parameterName
-                            echo "Extracted parameter value: ${parameterValue}"
-
-                            // Parse the JSON string of parameters
-                            def jobParams = jsonSlurper.parseText(paramsJson)
-
-                            // Convert parsed parameters to Jenkins build parameters
-                            def buildParams = jobParams.collect { key, value -> string(name: key, value: value.toString()) }
-
-                            // Trigger the specified job with parameters
-                            build job: jobName, parameters: buildParams
-                        }
-                    } else if (changeId.startsWith('IN')) {
-                        echo "The ID starts with 'IN'. No curl command executed."
-                    } else {
-                        echo "The ID does not start with 'CHG' or 'IN'. No action taken."
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-
-pipeline {
-    agent any
 
     stages {
         stage('Extract Credentials') {
             steps {
                 script {
-                    withCredentials([file(credentialsId: 'aa_11', variable: 'SA_KEY_FILE')]) {
-                        // You can now use the SA_KEY_FILE variable to reference the service account key file
-                        echo "Service account key file path: ${SA_KEY_FILE}"
+                    withCredentials([sshUserPrivateKey(credentialsId: 'aa_11', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                        // You can now use the SSH_USER and SSH_KEY variables to reference the username and private key file
+                        echo "SSH Username: ${SSH_USER}"
+                        echo "SSH Private Key file path: ${SSH_KEY}"
                         
                         // For example, you might want to copy the key file to a specific location
-                        sh 'cp $SA_KEY_FILE /path/to/destination'
+                        sh 'cp $SSH_KEY /path/to/destination'
                         
-                        // Or use it directly in a command
-                        sh 'cat $SA_KEY_FILE'
+                        // Or use it directly in an SSH command
+                        sh '''
+                            ssh -i $SSH_KEY $SSH_USER@hostname << EOF
+                            echo "Connected to remote host"
+                            EOF
+                        '''
                     }
                 }
             }
