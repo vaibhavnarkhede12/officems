@@ -25,3 +25,13 @@ pipeline {
         }
     }
 }
+
+
+
+
+- name: Set ownership and permissions for /root/.pipeline/pip.conf
+  file:
+    path: /root/.pipeline/pip.conf
+    owner: root
+    group: root
+    mode: '0644'
