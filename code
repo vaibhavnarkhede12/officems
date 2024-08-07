@@ -29,6 +29,23 @@ pipeline {
 
 
 
+#!/bin/bash
+
+# Set the service account email
+SERVICE_ACCOUNT_EMAIL="your-service-account-email@your-project.iam.gserviceaccount.com"
+
+# Fetch the service account details
+SERVICE_ACCOUNT_NAME=$(gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL --format="value(displayName)")
+
+# Check if the service account name is 'abc-test'
+if [ "$SERVICE_ACCOUNT_NAME" == "abc-test" ]; then
+    echo "The service account name is abc-test."
+else
+    echo "The service account name is not abc-test. It is $SERVICE_ACCOUNT_NAME."
+fi
+
+
+
 - name: Set ownership and permissions for /root/.pipeline/pip.conf
   file:
     path: /root/.pipeline/pip.conf
