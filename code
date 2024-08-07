@@ -1,54 +1,21 @@
-pipeline {
-    agent any
+# Fetch the project name
+PROJECT_ID=$(curl -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id")
+PROJECT_NAME=$(gcloud projects describe $PROJECT_ID --format="value(name)")
 
-    stages {
-        stage('Extract Credentials') {
-            steps {
-                script {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'aa_11', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-                        // You can now use the SSH_USER and SSH_KEY variables to reference the username and private key file
-                        echo "SSH Username: ${SSH_USER}"
-                        echo "SSH Private Key file path: ${SSH_KEY}"
-                        
-                        // For example, you might want to copy the key file to a specific location
-                        sh 'cp $SSH_KEY /path/to/destination'
-                        
-                        // Or use it directly in an SSH command
-                        sh '''
-                            ssh -i $SSH_KEY $SSH_USER@hostname << EOF
-                            echo "Connected to remote host"
-                            EOF
-                        '''
-                    }
-                }
-            }
-        }
-    }
-}
+# Extract the environment part (dev or prod)
+ENVIRONMENT=$(echo $PROJECT_NAME | awk -F '-' '{print $NF}')
 
+# Print the environment
+echo "Environment: $ENVIRONMENT"
 
-
-
-#!/bin/bash
-
-# Set the service account email
-SERVICE_ACCOUNT_EMAIL="your-service-account-email@your-project.iam.gserviceaccount.com"
-
-# Fetch the service account details
-SERVICE_ACCOUNT_NAME=$(gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL --format="value(displayName)")
-
-# Check if the service account name is 'abc-test'
-if [ "$SERVICE_ACCOUNT_NAME" == "abc-test" ]; then
-    echo "The service account name is abc-test."
+# If-else condition based on the environment
+if [ "$ENVIRONMENT" == "dev" ]; then
+    echo "This is the development environment."
+    # Add your development environment-specific commands here
+elif [ "$ENVIRONMENT" == "prod" ]; then
+    echo "This is the production environment."
+    # Add your production environment-specific commands here
 else
-    echo "The service account name is not abc-test. It is $SERVICE_ACCOUNT_NAME."
+    echo "Unknown environment: $ENVIRONMENT"
+    # Add your handling for unknown environments here
 fi
-
-
-
-- name: Set ownership and permissions for /root/.pipeline/pip.conf
-  file:
-    path: /root/.pipeline/pip.conf
-    owner: root
-    group: root
-    mode: '0644'
