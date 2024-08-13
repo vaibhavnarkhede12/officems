@@ -24,3 +24,8 @@ pipeline {
         }
     }
 }
+
+
+
+
+=IFERROR(IF(ISNA(MATCH(B1, A:A, 0)), B1, ""), "")
