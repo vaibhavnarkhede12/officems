@@ -19,3 +19,26 @@ else
     echo "Unknown environment: $ENVIRONMENT"
     # Add your handling for unknown environments here
 fi
+
+
+
+
+pipeline {
+    agent any
+    
+    stages {
+        stage('Check URL') {
+            steps {
+                script {
+                    def responseCode = sh(script: "curl -o /dev/null -s -w '%{http_code}' https://yproject.uk.com", returnStdout: true).trim()
+                    
+                    if (responseCode == '200') {
+                        echo 'yes'
+                    } else {
+                        echo 'no'
+                    }
+                }
+            }
+        }
+    }
+}
