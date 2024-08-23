@@ -17,16 +17,39 @@ def search_code_in_org(org_name, search_term):
     result = g.search_code(query)
     return result
 
-def get_last_committer(repo, file_path):
-    """Gets the last committer for a specified file in a repository."""
+def get_last_commit_info(repo, file_path):
+    """Gets the last commit information (author and committer) for a specified file in a repository."""
     try:
         commits = repo.get_commits(path=file_path)
         if commits.totalCount > 0:
-            return commits[0].commit.committer.name
-        return None
+            last_commit = commits[0].commit
+            author = last_commit.author.name if last_commit.author else 'Unknown'
+            committer = last_commit.committer.name if last_commit.committer else 'Unknown'
+            return author, committer
+        return None, None
     except Exception as e:
         print(f"Error fetching commits for file {file_path} in repo {repo.name}: {str(e)}")
-        return None
+        return None, None
+
+def get_code_snippet(repo, file_path, search_term):
+    """Retrieves the snippet of code from a file where the search term is found."""
+    try:
+        file_content = repo.get_contents(file_path)
+        content = file_content.decoded_content.decode()
+        lines = content.split('\n')
+        snippets = []
+        for i, line in enumerate(lines):
+            if search_term in line:
+                # Collect some context around the match if needed
+                snippet = {
+                    "line_number": i + 1,
+                    "code_line": line
+                }
+                snippets.append(snippet)
+        return snippets
+    except Exception as e:
+        print(f"Error fetching code snippet for file {file_path} in repo {repo.name}: {str(e)}")
+        return []
 
 def main():
     """Main function to gather data and write to a CSV file."""
@@ -36,13 +59,16 @@ def main():
     for code_result in search_results:
         repo_name = code_result.repository.name
         file_path = code_result.path
-        last_committer = get_last_committer(code_result.repository, file_path)
-        all_data.append([repo_name, file_path, last_committer])
+        author, committer = get_last_commit_info(code_result.repository, file_path)
+        code_snippets = get_code_snippet(code_result.repository, file_path, SEARCH_TERM)
+        
+        for snippet in code_snippets:
+            all_data.append([repo_name, file_path, snippet["line_number"], snippet["code_line"], author, committer])
     
     # Write data to CSV
     with open(CSV_FILE, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["Repository", "File Path", "Last Committer"])
+        writer.writerow(["Repository", "File Path", "Line Number", "Code Line", "Author", "Committer"])
         writer.writerows(all_data)
     
     print(f"Data has been written to {CSV_FILE}")
