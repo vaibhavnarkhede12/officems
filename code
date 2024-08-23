@@ -1,14 +1,15 @@
 from github import Github
 import csv
 
-# Replace 'your_github_token' with your personal access token
+# Replace 'your_github_token' with your personal access token for GitHub Enterprise
 GITHUB_TOKEN = 'your_github_token'
+GITHUB_ENTERPRISE_URL = 'https://almgithub.uk.bcp/api/v3'  # GitHub Enterprise API URL
 ORG_NAME = 'ihub-infrastructure'
 SEARCH_TERM = 'efx'
 CSV_FILE = 'efx_occurrences.csv'
 
-# Initialize Github instance with the provided token
-g = Github(GITHUB_TOKEN)
+# Initialize Github instance with the provided token and Enterprise URL
+g = Github(base_url=GITHUB_ENTERPRISE_URL, login_or_token=GITHUB_TOKEN)
 
 def list_repositories(org_name):
     """Lists all repositories in the specified GitHub organization."""
