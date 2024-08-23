@@ -11,27 +11,11 @@ CSV_FILE = 'efx_occurrences.csv'
 # Initialize Github instance with the provided token and Enterprise URL
 g = Github(base_url=GITHUB_ENTERPRISE_URL, login_or_token=GITHUB_TOKEN)
 
-def list_repositories(org_name):
-    """Lists all repositories in the specified GitHub organization."""
-    org = g.get_organization(org_name)
-    return org.get_repos()
-
-def search_term_in_repo(repo, search_term):
-    """Searches for a specific term in all files of a given repository."""
-    try:
-        contents = repo.get_contents("")
-        all_files = []
-        while contents:
-            file_content = contents.pop(0)
-            if file_content.type == "dir":
-                contents.extend(repo.get_contents(file_content.path))
-            else:
-                if search_term in file_content.decoded_content.decode():
-                    all_files.append(file_content.path)
-        return all_files
-    except Exception as e:
-        print(f"Error searching in repo {repo.name}: {str(e)}")
-        return []
+def search_code_in_org(org_name, search_term):
+    """Uses the GitHub search API to find occurrences of a term in code across the organization."""
+    query = f"{search_term} org:{org_name}"
+    result = g.search_code(query)
+    return result
 
 def get_last_committer(repo, file_path):
     """Gets the last committer for a specified file in a repository."""
@@ -47,14 +31,13 @@ def get_last_committer(repo, file_path):
 def main():
     """Main function to gather data and write to a CSV file."""
     all_data = []
-    repositories = list_repositories(ORG_NAME)
+    search_results = search_code_in_org(ORG_NAME, SEARCH_TERM)
     
-    for repo in repositories:
-        print(f"Searching in repository: {repo.name}")
-        search_results = search_term_in_repo(repo, SEARCH_TERM)
-        for file_path in search_results:
-            last_committer = get_last_committer(repo, file_path)
-            all_data.append([repo.name, file_path, last_committer])
+    for code_result in search_results:
+        repo_name = code_result.repository.name
+        file_path = code_result.path
+        last_committer = get_last_committer(code_result.repository, file_path)
+        all_data.append([repo_name, file_path, last_committer])
     
     # Write data to CSV
     with open(CSV_FILE, mode='w', newline='') as file:
