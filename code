@@ -8,6 +8,18 @@ ORG_NAME = 'ihub-infrastructure'
 SEARCH_TERM = 'efx'
 CSV_FILE = 'efx_occurrences.csv'
 
+SELECT 
+  table_catalog, 
+  table_schema, 
+  table_name 
+FROM 
+  `your_project_id`.`region-us`.INFORMATION_SCHEMA.TABLES 
+WHERE 
+  table_type = 'BASE TABLE';
+
+
+
+
 # Initialize Github instance with the provided token and Enterprise URL
 g = Github(base_url=GITHUB_ENTERPRISE_URL, login_or_token=GITHUB_TOKEN)
 
