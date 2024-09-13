@@ -28,3 +28,16 @@ jobs:
           else
             echo "PR check passed!"
           fi
+
+
+# - name: Check for forbidden text using Python
+#   run: |
+#     python -c "
+# import os
+# modified_files = os.listdir('.')
+# if '../../modules' in modified_files:
+#     print('PR contains forbidden text: ../../modules')
+#     exit(1)
+# else:
+#     print('PR check passed!')
+# "
