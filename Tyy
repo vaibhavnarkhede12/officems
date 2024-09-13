@@ -14,6 +14,7 @@ spec:
   selector:
     app: nginx
 
+../../modules/
 ---
 
 apiVersion: apps/v1
