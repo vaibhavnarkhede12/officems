@@ -12,6 +12,7 @@ spec:
     name: web
   type: LoadBalancer
   selector:
+
     app: nginx
 
 ---
