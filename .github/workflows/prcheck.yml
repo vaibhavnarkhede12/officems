@@ -15,7 +15,7 @@ jobs:
       - name: Get the list of modified files
         run: |
           git fetch origin ${{ github.base_ref }}
-          MODIFIED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
+          MODIFIED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }})
           echo "$MODIFIED_FILES" > modified_files.txt
 
       - name: Check for forbidden text
