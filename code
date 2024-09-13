@@ -1,89 +1,28 @@
-from github import Github
-import csv
+name: Check PR for ../../modules
 
-# Replace 'your_github_token' with your personal access token for GitHub Enterprise
-GITHUB_TOKEN = 'your_github_token'
-GITHUB_ENTERPRISE_URL = 'https://almgithub.uk.bcp/api/v3'  # GitHub Enterprise API URL
-ORG_NAME = 'ihub-infrastructure'
-SEARCH_TERM = 'efx'
-CSV_FILE = 'efx_occurrences.csv'
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
 
-SELECT 
-  table_catalog, 
-  table_schema, 
-  table_name 
-FROM 
-  `your_project_id`.`region-us`.INFORMATION_SCHEMA.TABLES 
-WHERE 
-  table_type = 'BASE TABLE';
+jobs:
+  check-modified-files:
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
+      - name: Get the list of modified files
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          MODIFIED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
+          echo "$MODIFIED_FILES" > modified_files.txt
 
-
-# Initialize Github instance with the provided token and Enterprise URL
-g = Github(base_url=GITHUB_ENTERPRISE_URL, login_or_token=GITHUB_TOKEN)
-
-def search_code_in_org(org_name, search_term):
-    """Uses the GitHub search API to find occurrences of a term in code across the organization."""
-    query = f"{search_term} org:{org_name}"
-    result = g.search_code(query)
-    return result
-
-def get_last_commit_info(repo, file_path):
-    """Gets the last commit information (author and committer) for a specified file in a repository."""
-    try:
-        commits = repo.get_commits(path=file_path)
-        if commits.totalCount > 0:
-            last_commit = commits[0].commit
-            author = last_commit.author.name if last_commit.author else 'Unknown'
-            committer = last_commit.committer.name if last_commit.committer else 'Unknown'
-            return author, committer
-        return None, None
-    except Exception as e:
-        print(f"Error fetching commits for file {file_path} in repo {repo.name}: {str(e)}")
-        return None, None
-
-def get_code_snippet(repo, file_path, search_term):
-    """Retrieves the snippet of code from a file where the search term is found."""
-    try:
-        file_content = repo.get_contents(file_path)
-        content = file_content.decoded_content.decode()
-        lines = content.split('\n')
-        snippets = []
-        for i, line in enumerate(lines):
-            if search_term in line:
-                # Collect some context around the match if needed
-                snippet = {
-                    "line_number": i + 1,
-                    "code_line": line
-                }
-                snippets.append(snippet)
-        return snippets
-    except Exception as e:
-        print(f"Error fetching code snippet for file {file_path} in repo {repo.name}: {str(e)}")
-        return []
-
-def main():
-    """Main function to gather data and write to a CSV file."""
-    all_data = []
-    search_results = search_code_in_org(ORG_NAME, SEARCH_TERM)
-    
-    for code_result in search_results:
-        repo_name = code_result.repository.name
-        file_path = code_result.path
-        author, committer = get_last_commit_info(code_result.repository, file_path)
-        code_snippets = get_code_snippet(code_result.repository, file_path, SEARCH_TERM)
-        
-        for snippet in code_snippets:
-            all_data.append([repo_name, file_path, snippet["line_number"], snippet["code_line"], author, committer])
-    
-    # Write data to CSV
-    with open(CSV_FILE, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Repository", "File Path", "Line Number", "Code Line", "Author", "Committer"])
-        writer.writerows(all_data)
-    
-    print(f"Data has been written to {CSV_FILE}")
-
-if __name__ == "__main__":
-    main()
+      - name: Check for forbidden text
+        run: |
+          if grep -q "../../modules" $(cat modified_files.txt); then
+            echo "PR contains forbidden text: ../../modules"
+            exit 1
+          else
+            echo "PR check passed!"
+          fi
