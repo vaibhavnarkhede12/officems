@@ -11,6 +11,7 @@ spec:
     nodePort: 30800
     name: web
   type: LoadBalancer
+
   selector:
     app: nginx
 
