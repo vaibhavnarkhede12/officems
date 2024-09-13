@@ -3,6 +3,8 @@ name: Check PR for ../../modules
 on:
   pull_request:
     types: [opened, edited, synchronize]
+    branches:
+      -  *
 
 jobs:
   check-modified-files:
