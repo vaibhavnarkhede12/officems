@@ -1,28 +1,33 @@
-name: Check PR for ../../modules
+import requests
+from requests.auth import HTTPBasicAuth
 
-on:
-  pull_request:
-    types: [opened, edited, synchronize]
+# Jenkins credentials
+JENKINS_URL = "http://<JENKINS_URL>"  # Replace with your Jenkins URL
+JOB_NAME = "<JOB_NAME>"                # Replace with your Jenkins job name
+BUILD_NUMBER = "<BUILD_NUMBER>"        # Replace with the specific build number
+USER = "<USERNAME>"                    # Jenkins username
+API_TOKEN = "<API_TOKEN>"              # Jenkins API token
 
-jobs:
-  check-modified-files:
-    runs-on: ubuntu-latest
+# Input details
+INPUT_ID = "<INPUT_ID>"  # Replace with the input request's unique ID
+ACTION = "proceed"       # Use 'proceed' for deploy or 'abort' for aborting
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+# Jenkins input endpoint URL for submitting input
+url = f"{JENKINS_URL}/job/{JOB_NAME}/{BUILD_NUMBER}/input/{INPUT_ID}/{ACTION}"
 
-      - name: Get the list of modified files
-        run: |
-          git fetch origin ${{ github.base_ref }}
-          MODIFIED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
-          echo "$MODIFIED_FILES" > modified_files.txt
+# Headers and payload for submitting input
+headers = {
+    "Content-Type": "application/x-www-form-urlencoded"
+}
+payload = {
+    "json": '{"proceed":"Deploy"}' if ACTION == "proceed" else '{"abort":"Abort"}'
+}
 
-      - name: Check for forbidden text
-        run: |
-          if grep -q "../../modules" $(cat modified_files.txt); then
-            echo "PR contains forbidden text: ../../modules"
-            exit 1
-          else
-            echo "PR check passed!"
-          fi
+# Send the POST request to Jenkins
+response = requests.post(url, headers=headers, data=payload, auth=HTTPBasicAuth(USER, API_TOKEN))
+
+if response.status_code == 200:
+    print(f"Successfully sent {ACTION} input to the pipeline.")
+else:
+    print(f"Failed to send input. Status code: {response.status_code}")
+    print(response.text)
