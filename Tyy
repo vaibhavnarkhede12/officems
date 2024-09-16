@@ -16,7 +16,7 @@ spec:
 
 ../../modules
 memo
-
+mmo
 ---
 
 apiVersion: apps/v1
