@@ -31,6 +31,34 @@ pipeline {
         stage('Get PR Head Commit') {
             steps {
                 script {
+                    if (env.CHANGE_ID) {
+                        echo "Building PR #${env.CHANGE_ID} targeting ${env.CHANGE_TARGET}"
+                        
+                        // Fetch the latest from the remote PR branch
+                        sh 'git fetch origin +refs/pull/*/head:refs/remotes/origin/pr/*'
+
+                        // Get the actual PR branch head commit
+                        def prHeadCommit = sh(
+                            script: 'git rev-parse origin/pr/' + env.CHANGE_ID,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "PR Head Commit: ${prHeadCommit}"
+                    } else {
+                        echo "Not a Pull Request build."
+                    }
+                }
+            }
+        }
+    }
+}
+
+pipeline {
+    agent any
+    stages {
+        stage('Get PR Head Commit') {
+            steps {
+                script {
                     // Ensure you're on the correct PR branch
                     if (env.CHANGE_ID) {
                         echo "Building PR #${env.CHANGE_ID} targeting ${env.CHANGE_TARGET}"
