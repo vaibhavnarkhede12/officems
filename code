@@ -22,3 +22,28 @@ if response.status_code == 200:
 else:
     print(f"Failed to execute {ACTION}. Status code: {response.status_code}")
     print(response.text)
+
+
+
+pipeline {
+    agent any
+    stages {
+        stage('Get PR Head Commit') {
+            steps {
+                script {
+                    // Ensure you're on the correct PR branch
+                    if (env.CHANGE_ID) {
+                        echo "Building PR #${env.CHANGE_ID} targeting ${env.CHANGE_TARGET}"
+                        def headCommit = sh(
+                            script: 'git rev-parse HEAD',
+                            returnStdout: true
+                        ).trim()
+                        echo "PR Head Commit: ${headCommit}"
+                    } else {
+                        echo "Not a Pull Request build."
+                    }
+                }
+            }
+        }
+    }
+}
