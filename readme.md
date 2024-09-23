@@ -1,38 +1,41 @@
+In BigQuery, there are two main pricing models for query processing: on-demand pricing and slot-based pricing (referred to as BigQuery slot editions). Here's a breakdown of the differences:
 
-we shhud surely use this so that we can find the keys and cred  before code is pushed to github
+1. On-Demand Pricing
 
-PR_COMMIT=$(git rev-parse refs/remotes/origin/pull/$CHANGE_ID/head)
-echo $PR_COMMIT
+How it works: You pay for the amount of data your queries process. The cost is calculated based on the number of bytes read by your query.
+
+Cost structure: $5 per TB of data processed.
+
+Flexibility: No upfront commitments, and you pay only for what you use. Good for irregular query patterns or low usage.
+
+Scalability: BigQuery automatically scales resources as needed to process your queries.
+
+Usage: Suitable for small to medium workloads, especially when workload peaks are unpredictable or data sizes are relatively small.
 
 
-pipeline {
-    agent any
+2. Slot-Based Pricing (BigQuery Slot Editions)
 
-    stages {
-        stage('Check Changed Files for ../../modules') {
-            steps {
-                script {
-                    // Get the list of changed files in the latest commit
-                    def changedFiles = sh(script: "git diff --name-only HEAD~1 HEAD", returnStdout: true).trim()
+BigQuery slot editions offer reserved compute capacity (slots) instead of charging based on the amount of data processed.
 
-                    // Check if any of the changed files contains '../../modules'
-                    def matchFound = false
+How it works: You purchase dedicated processing power in the form of slots, which represent units of computational capacity. Slots are used to execute queries, and the more slots you have, the faster queries can run.
 
-                    changedFiles.split('\n').each { file ->
-                        def fileContent = sh(script: "git show HEAD:${file}", returnStdout: true)
-                        if (fileContent.contains('../../modules')) {
-                            matchFound = true
-                            echo "Match found in file: ${file}"
-                        }
-                    }
 
-                    if (matchFound) {
-                        echo "Pattern '../../modules' found in changed files!"
-                    } else {
-                        echo "No match for pattern '../../modules' in the changed files."
-                    }
-                }
-            }
-        }
-    }
-}
+Slot Editions Types:
+
+Flex Slots:
+
+Minimum commitment: 60 seconds.
+
+Can be used for short bursts of workloads.
+
+Good for handling short, high-intensity workloads or performance optimization.
+
+
+Annual/Monthly Slot Reservations:
+
+Minimum commitment: 30 days (monthly) or 1 year (annual).
+
+These offer lower costs for long-term, consistent usage compared to
+
+
+
