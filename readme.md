@@ -1,4 +1,5 @@
 In BigQuery, there are two main pricing models for query processing: on-demand pricing and slot-based pricing (referred to as BigQuery slot editions). Here's a breakdown of the differences:
+https://drive.google.com/file/d/1AQYK1EDl75rMsuSW9olm3qpyQfhY6M4d/view?usp=drivesdk
 
 1. On-Demand Pricing
 
