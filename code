@@ -1,3 +1,81 @@
+
+from google.cloud import bigquery_reservation
+import datetime
+import json
+import time
+
+# Load configuration
+with open("reservations_config.json", "r") as config_file:
+    config = json.load(config_file)
+
+# Initialize BigQuery Reservation client
+client = bigquery_reservation.ReservationServiceClient()
+
+def adjust_slots():
+    current_time = datetime.datetime.now().strftime("%H:%M")
+    for reservation in config["reservations"]:
+        reservation_name = reservation["name"]
+        default_slots = reservation.get("default_slots", 100)
+        adjusted = False
+
+        for time_slot in reservation["time_slots"]:
+            if time_slot["start"] <= current_time <= time_slot["end"]:
+                min_slots = time_slot["min_slots"]
+                max_slots = time_slot["max_slots"]
+
+                # Fetch current reservation details
+                reservation_path = f"projects/{project_id}/locations/{region}/reservations/{reservation_name}"
+                reservation_details = client.get_reservation(name=reservation_path)
+
+                current_slots = reservation_details.slot_capacity
+
+                # Adjust slots if needed
+                if current_slots < min_slots:
+                    client.update_reservation(
+                        bigquery_reservation.UpdateReservationRequest(
+                            reservation={
+                                "name": reservation_path,
+                                "slot_capacity": min_slots,
+                            }
+                        )
+                    )
+                    print(f"Increased slots for {reservation_name} to {min_slots}")
+                elif current_slots > max_slots:
+                    client.update_reservation(
+                        bigquery_reservation.UpdateReservationRequest(
+                            reservation={
+                                "name": reservation_path,
+                                "slot_capacity": max_slots,
+                            }
+                        )
+                    )
+                    print(f"Decreased slots for {reservation_name} to {max_slots}")
+                adjusted = True
+                break
+
+        if not adjusted:
+            # Revert to default slots
+            reservation_path = f"projects/{project_id}/locations/{region}/reservations/{reservation_name}"
+            reservation_details = client.get_reservation(name=reservation_path)
+            current_slots = reservation_details.slot_capacity
+
+            if current_slots != default_slots:
+                client.update_reservation(
+                    bigquery_reservation.UpdateReservationRequest(
+                        reservation={
+                            "name": reservation_path,
+                            "slot_capacity": default_slots,
+                        }
+                    )
+                )
+                print(f"Reverted slots for {reservation_name} to default: {default_slots}")
+
+# Schedule the job
+while True:
+    adjust_slots()
+    time.sleep(60)  # Run every 1 minute
+
+
 import requests
 from requests.auth import HTTPBasicAuth
 
