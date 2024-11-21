@@ -13,7 +13,8 @@ spec:
   type: LoadBalancer
   selector:
     app: nginx
-
+{../../modules}
+mmo
 ---
 
 apiVersion: apps/v1
