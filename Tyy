@@ -7,6 +7,9 @@ metadata:
 spec:
   ports:
   - port: 80
+
+../../modules
+mmo
     targetPort: 80
     nodePort: 30800
     name: web
