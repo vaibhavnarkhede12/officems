@@ -9,6 +9,7 @@ spec:
   - port: 80
     targetPort: 80
     nodePort: 30800
+zzd
     name: web
   type: LoadBalancer
   selector:
