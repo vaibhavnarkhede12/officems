@@ -1,3 +1,38 @@
+# Use Ubuntu as the base image
+FROM ubuntu:latest
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update packages and install necessary tools
+RUN apt-get update && apt-get install -y \
+    sudo \
+    && apt-get clean
+
+# Create Tomcat logs directory
+RUN mkdir -p /var/log/tomcat
+
+# Create symlinks for Tomcat files and logs
+RUN ln -s /opt/apache-tomcat /opt/tomcat && \
+    ln -s /var/log/tomcat /opt/tomcat/logs
+
+# Add a user "tomcat" with specific UID
+RUN useradd -m -u 700 tomcat
+
+# Give the "tomcat" user ownership and permissions
+RUN chown -R tomcat:tomcat /opt/apache-tomcat && chmod -R 0775 /opt/apache-tomcat && \
+    chown -R tomcat:tomcat /var/log/tomcat && chmod -R 0775 /var/log/tomcat
+
+# Set the default user as tomcat
+USER tomcat
+
+# Default command
+CMD ["/bin/bash"]
+
+
+
+
+
 
 # Use Ubuntu as the base image
 FROM ubuntu:latest
