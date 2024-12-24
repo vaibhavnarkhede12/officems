@@ -1,3 +1,41 @@
+from flask import Flask, jsonify
+import psycopg2
+from psycopg2 import OperationalError
+
+app = Flask(__name__)
+
+# Database connection details
+DB_CONFIG = {
+    "dbname": "your_database",
+    "user": "your_user",
+    "password": "your_password",
+    "host": "your_postgres_ip",
+    "port": "your_postgres_port",
+}
+
+@app.route('/')
+def health_check():
+    return "Hi! Visit /db-status to check the database connection status."
+
+@app.route('/db-status', methods=['GET'])
+def db_status():
+    try:
+        # Attempt to connect to the database
+        connection = psycopg2.connect(**DB_CONFIG)
+        connection.close()
+        return jsonify({"status": "success", "message": "Connected to the database!"})
+    except OperationalError as e:
+        return jsonify({"status": "failure", "message": str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
+
+
+
+
+
+
+
 
 from google.cloud import bigquery_reservation
 import datetime
