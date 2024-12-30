@@ -1,0 +1,39 @@
+sleep 120
+MULTINIC_INSTANCE_NIC1_IP=$(ip a show ens5 | grep inet | awk '{ print $2 }' | cut -d'/' -f 1)
+STANDALONE_SUBNET_GATEWAY=192.168.16.1
+CLOUDSQL_SUBNET_GATEWAY=192.168.197.1
+CLOUDSQL_SUBNET_CIDR=192.168.197.0/24
+
+#this command will configure ens5 with the nic2 ip address just to avoid any confusion and mask it with 255... so that is communicates only within its networks unless any route is explicity provided and broacast means it only broadcasts to itself and it is not necessary and can be removed
+sudo ifconfig ens5 $MULTINIC_INSTANCE_NIC1_IP netmask 255.255.255.255 broadcast $MULTINIC_INSTANCE_NIC1_IP mtu 1430
+
+# create a rotuing table with number 1 and name rt1 
+echo "1 rt1" | sudo tee -a /etc/iproute2/rt_tables
+
+#add a route , this ensures that any pcket that is going to use 192.168.16.1 will get out through ens5 and its ip address specifically . 
+sudo ip route add $STANDALONE_SUBNET_GATEWAY src $MULTINIC_INSTANCE_NIC1_IP dev ens5 table rt1
+
+# all traffic from ens5 whose route cant be found is routed via the 192.168.16.1 gateway , hence the above command is good to have but not necessary again
+sudo ip route add default via $STANDALONE_SUBNET_GATEWAY dev ens5 table rt1
+
+# Adds a rule to route traffic originating from $MULTINIC_INSTANCE_NIC1_IP through the rt1 table.
+sudo ip rule add from $MULTINIC_INSTANCE_NIC1_IP/32 table rt1
+
+#adds a policy-based routing rule for outbound traffic destined to $MULTINIC_INSTANCE_NIC1_IP. This rule ensures that any traffic intended for $MULTINIC_INSTANCE_NIC1_IP will be routed using the rt1 routing table.
+sudo ip rule add to $MULTINIC_INSTANCE_NIC1_IP/32 table rt1
+
+# This command ensures that any traffic destined for IP addresses within the $CLOUDSQL_SUBNET_CIDR range will use the ens5 interface.
+sudo ip route add $CLOUDSQL_SUBNET_GATEWAY src $MULTINIC_INSTANCE_NIC1_IP dev ens5 table rt1
+
+# This command ensures that any traffic destined for IP addresses within the $CLOUDSQL_SUBNET_CIDR range will use the ens5 interface.
+sudo ip route add $CLOUDSQL_SUBNET_CIDR dev ens5
+
+
+
+
+
+
+
+
+
+
