@@ -1,214 +1,69 @@
-FROM python:3.9-slim
+static_resources:
+  listeners:
+  - name: listener_0
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 8080 }
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: cloud_run }
+          http_filters:
+          - name: envoy.filters.http.jwt_authn
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+              providers:
+                google:
+                  issuer: "https://accounts.google.com"
+                  remote_jwks:
+                    http_uri:
+                      uri: "https://www.googleapis.com/oauth2/v3/certs"
+                      cluster: jwt_cluster
+                      timeout: 5s
+                  forward: true
+          - name: envoy.filters.http.router
+  clusters:
+  - name: cloud_run
+    connect_timeout: 5s
+    type: LOGICAL_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: cloud_run
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address: { address: <CLOUD_RUN_URL>, port_value: 443 }
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
 
-# Install dependencies
-WORKDIR /app
-COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+  - name: jwt_cluster
+    connect_timeout: 5s
+    type: LOGICAL_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: jwt_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address: { address: www.googleapis.com, port_value: 443 }
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
 
-# Copy the Flask app
-COPY app.py app.py
-
-# Expose the port Flask runs on
-EXPOSE 8080
-
-# Run the Flask app
-CMD ["python", "app.py"]
-
-
-
-
-
-
-from flask import Flask, jsonify
-import psycopg2
-from psycopg2 import OperationalError
-
-app = Flask(__name__)
-
-# Database connection details
-DB_CONFIG = {
-    "dbname": "your_database",
-    "user": "your_user",
-    "password": "your_password",
-    "host": "your_postgres_ip",
-    "port": "your_postgres_port",
-}
-
-@app.route('/')
-def health_check():
-    return "Hi! Visit /db-status to check the database connection status."
-
-@app.route('/db-status', methods=['GET'])
-def db_status():
-    try:
-        # Attempt to connect to the database
-        connection = psycopg2.connect(**DB_CONFIG)
-        connection.close()
-        return jsonify({"status": "success", "message": "Connected to the database!"})
-    except OperationalError as e:
-        return jsonify({"status": "failure", "message": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
-
-
-
-
-
-
-
-
-from google.cloud import bigquery_reservation
-import datetime
-import json
-import time
-
-# Load configuration
-with open("reservations_config.json", "r") as config_file:
-    config = json.load(config_file)
-
-# Initialize BigQuery Reservation client
-client = bigquery_reservation.ReservationServiceClient()
-
-def adjust_slots():
-    current_time = datetime.datetime.now().strftime("%H:%M")
-    for reservation in config["reservations"]:
-        reservation_name = reservation["name"]
-        default_slots = reservation.get("default_slots", 100)
-        adjusted = False
-
-        for time_slot in reservation["time_slots"]:
-            if time_slot["start"] <= current_time <= time_slot["end"]:
-                min_slots = time_slot["min_slots"]
-                max_slots = time_slot["max_slots"]
-
-                # Fetch current reservation details
-                reservation_path = f"projects/{project_id}/locations/{region}/reservations/{reservation_name}"
-                reservation_details = client.get_reservation(name=reservation_path)
-
-                current_slots = reservation_details.slot_capacity
-
-                # Adjust slots if needed
-                if current_slots < min_slots:
-                    client.update_reservation(
-                        bigquery_reservation.UpdateReservationRequest(
-                            reservation={
-                                "name": reservation_path,
-                                "slot_capacity": min_slots,
-                            }
-                        )
-                    )
-                    print(f"Increased slots for {reservation_name} to {min_slots}")
-                elif current_slots > max_slots:
-                    client.update_reservation(
-                        bigquery_reservation.UpdateReservationRequest(
-                            reservation={
-                                "name": reservation_path,
-                                "slot_capacity": max_slots,
-                            }
-                        )
-                    )
-                    print(f"Decreased slots for {reservation_name} to {max_slots}")
-                adjusted = True
-                break
-
-        if not adjusted:
-            # Revert to default slots
-            reservation_path = f"projects/{project_id}/locations/{region}/reservations/{reservation_name}"
-            reservation_details = client.get_reservation(name=reservation_path)
-            current_slots = reservation_details.slot_capacity
-
-            if current_slots != default_slots:
-                client.update_reservation(
-                    bigquery_reservation.UpdateReservationRequest(
-                        reservation={
-                            "name": reservation_path,
-                            "slot_capacity": default_slots,
-                        }
-                    )
-                )
-                print(f"Reverted slots for {reservation_name} to default: {default_slots}")
-
-# Schedule the job
-while True:
-    adjust_slots()
-    time.sleep(60)  # Run every 1 minute
-
-
-import requests
-from requests.auth import HTTPBasicAuth
-
-# Jenkins credentials
-JENKINS_URL = "http://jenkins.com"
-JOB_PATH = "gdt02/job/gdtwpb/job/nebula/job/dev/job/globalplatform/job/ihub/job/master"
-BUILD_NUMBER = "<BUILD_NUMBER>"   # Replace with the specific build number
-USER = "<USERNAME>"               # Jenkins username
-API_TOKEN = "<API_TOKEN>"         # Jenkins API token
-
-# Action: 'doProceed' to deploy, 'doAbort' to abort
-ACTION = "doProceed"   # Use 'doAbort' to abort
-
-# Jenkins input endpoint URL for performing the action
-url = f"{JENKINS_URL}/{JOB_PATH}/{BUILD_NUMBER}/input/{ACTION}"
-
-# Send the POST request to Jenkins
-response = requests.post(url, auth=HTTPBasicAuth(USER, API_TOKEN))
-
-if response.status_code == 200:
-    print(f"Successfully executed {ACTION} on the pipeline.")
-else:
-    print(f"Failed to execute {ACTION}. Status code: {response.status_code}")
-    print(response.text)
-
-
-
-pipeline {
-    agent any
-    stages {
-        stage('Get PR Head Commit') {
-            steps {
-                script {
-                    if (env.CHANGE_ID) {
-                        echo "Building PR #${env.CHANGE_ID} targeting ${env.CHANGE_TARGET}"
-                        
-                        // Fetch the latest from the remote PR branch
-                        sh 'git fetch origin +refs/pull/*/head:refs/remotes/origin/pr/*'
-
-                        // Get the actual PR branch head commit
-                        def prHeadCommit = sh(
-                            script: 'git rev-parse origin/pr/' + env.CHANGE_ID,
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "PR Head Commit: ${prHeadCommit}"
-                    } else {
-                        echo "Not a Pull Request build."
-                    }
-                }
-            }
-        }
-    }
-}
-
-pipeline {
-    agent any
-    stages {
-        stage('Get PR Head Commit') {
-            steps {
-                script {
-                    // Ensure you're on the correct PR branch
-                    if (env.CHANGE_ID) {
-                        echo "Building PR #${env.CHANGE_ID} targeting ${env.CHANGE_TARGET}"
-                        def headCommit = sh(
-                            script: 'git rev-parse HEAD',
-                            returnStdout: true
-                        ).trim()
-                        echo "PR Head Commit: ${headCommit}"
-                    } else {
-                        echo "Not a Pull Request build."
-                    }
-                }
-            }
-        }
-    }
-}
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9901 }
