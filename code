@@ -1,69 +1,54 @@
-static_resources:
-  listeners:
-  - name: listener_0
-    address:
-      socket_address: { address: 0.0.0.0, port_value: 8080 }
-    filter_chains:
-    - filters:
-      - name: envoy.filters.network.http_connection_manager
-        typed_config:
-          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-          stat_prefix: ingress_http
-          route_config:
-            name: local_route
-            virtual_hosts:
-            - name: backend
-              domains: ["*"]
-              routes:
-              - match: { prefix: "/" }
-                route: { cluster: cloud_run }
-          http_filters:
-          - name: envoy.filters.http.jwt_authn
-            typed_config:
-              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
-              providers:
-                google:
-                  issuer: "https://accounts.google.com"
-                  remote_jwks:
-                    http_uri:
-                      uri: "https://www.googleapis.com/oauth2/v3/certs"
-                      cluster: jwt_cluster
-                      timeout: 5s
-                  forward: true
-          - name: envoy.filters.http.router
-  clusters:
-  - name: cloud_run
-    connect_timeout: 5s
-    type: LOGICAL_DNS
-    lb_policy: ROUND_ROBIN
-    load_assignment:
-      cluster_name: cloud_run
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address: { address: <CLOUD_RUN_URL>, port_value: 443 }
-    transport_socket:
-      name: envoy.transport_sockets.tls
-      typed_config:
-        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+import json
+import apache_beam as beam
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 
-  - name: jwt_cluster
-    connect_timeout: 5s
-    type: LOGICAL_DNS
-    lb_policy: ROUND_ROBIN
-    load_assignment:
-      cluster_name: jwt_cluster
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address: { address: www.googleapis.com, port_value: 443 }
-    transport_socket:
-      name: envoy.transport_sockets.tls
-      typed_config:
-        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
 
-admin:
-  address:
-    socket_address: { address: 127.0.0.1, port_value: 9901 }
+class FilterNullFields(beam.DoFn):
+    def process(self, element):
+        try:
+            record = json.loads(element)
+            cleaned_record = {
+                k: v for k, v in record.items()
+                if v not in [None, 'null', 'None']
+            }
+            if cleaned_record:
+                yield cleaned_record
+        except Exception as e:
+            # Optionally handle parse errors or send to dead-letter queue
+            pass
+
+
+def run():
+    # Update these
+    project = 'your-gcp-project-id'
+    subscription = 'projects/your-gcp-project-id/subscriptions/your-subscription-id'
+    table_spec = 'your-gcp-project-id:your_dataset.your_table'
+
+    options = PipelineOptions(
+        streaming=True,
+        project=project,
+        region='us-central1',
+        runner='DataflowRunner',  # Or 'DirectRunner' for local testing
+        temp_location='gs://your-temp-bucket/temp',
+        staging_location='gs://your-temp-bucket/staging',
+        save_main_session=True
+    )
+    options.view_as(StandardOptions).streaming = True
+
+    with beam.Pipeline(options=options) as p:
+        (
+            p
+            | "Read from Pub/Sub" >> beam.io.ReadFromPubSub(subscription=subscription).with_output_types(bytes)
+            | "Decode bytes" >> beam.Map(lambda x: x.decode('utf-8'))
+            | "Filter null fields" >> beam.ParDo(FilterNullFields())
+            | "Write to BigQuery" >> beam.io.WriteToBigQuery(
+                table_spec,
+                write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                create_disposition=beam.io.BigQueryDisposition.CREATE_NEVER,  # since table exists
+                method='STREAMING_INSERTS'
+            )
+        )
+
+
+if __name__ == '__main__':
+    run()
