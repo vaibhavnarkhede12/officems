@@ -1,54 +1,230 @@
-import json
-import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
-
-
-class FilterNullFields(beam.DoFn):
-    def process(self, element):
-        try:
-            record = json.loads(element)
-            cleaned_record = {
-                k: v for k, v in record.items()
-                if v not in [None, 'null', 'None']
+rules=[
+ {
+    "if":{
+        "AND":[
+            {
+               "AND":[
+                {"op":"==","key":"transactionDealCode","value":"PYM"},
+                {"op":"in","key":"inputMediumId","value":["IB180","IB001"]}
+               ]  
             }
-            if cleaned_record:
-                yield cleaned_record
-        except Exception as e:
-            # Optionally handle parse errors or send to dead-letter queue
-            pass
+        ]
+    },"then":{
+        "Payment_Type":"Payment"
+    }
+ },
+
+ 
+ {
+    "if":{
+        "AND":[
+            {"op":"contains","key":"transactionDealCode","value":["TT","TTI"]}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
 
 
-def run():
-    # Update these
-    project = 'your-gcp-project-id'
-    subscription = 'projects/your-gcp-project-id/subscriptions/your-subscription-id'
-    table_spec = 'your-gcp-project-id:your_dataset.your_table'
-
-    options = PipelineOptions(
-        streaming=True,
-        project=project,
-        region='us-central1',
-        runner='DataflowRunner',  # Or 'DirectRunner' for local testing
-        temp_location='gs://your-temp-bucket/temp',
-        staging_location='gs://your-temp-bucket/staging',
-        save_main_session=True
-    )
-    options.view_as(StandardOptions).streaming = True
-
-    with beam.Pipeline(options=options) as p:
-        (
-            p
-            | "Read from Pub/Sub" >> beam.io.ReadFromPubSub(subscription=subscription).with_output_types(bytes)
-            | "Decode bytes" >> beam.Map(lambda x: x.decode('utf-8'))
-            | "Filter null fields" >> beam.ParDo(FilterNullFields())
-            | "Write to BigQuery" >> beam.io.WriteToBigQuery(
-                table_spec,
-                write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-                create_disposition=beam.io.BigQueryDisposition.CREATE_NEVER,  # since table exists
-                method='STREAMING_INSERTS'
-            )
-        )
+ {
+    "if":{
+        "AND":[
+            {"op":"contains","key":"transactionDealCode","value":["FTR","TFD","SPD"]},
+            {"op":"contains","key":"inputMediumId","value":["IB185","IB154"]},
+            {"op":"startswith","key":"narrative1","value":"TT"}
+        ]
+    },"then":{
+        "Payment_Type":"Payment"
+    }
+ },
 
 
-if __name__ == '__main__':
-    run()
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"inputMediumId","value":"SS197FX"},
+        ]
+    },"then":{
+        "Payment_Type":"Payment"
+    }
+ },
+
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"transactionDealCode","value":"FTR"},
+            {"op":"==","key":"narrative1","value":"Global Transfer"}
+        ]
+    },"then":{
+        "Payment_Type":"Payment"
+    }
+ },
+
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"transactionDealCode","value":"FTR"},
+            {"op":"in","key":"inputMediumId","value":["IB185","IB154"]},
+            {"op":"not startswith","key":"narrative1","value":"TT"}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"transactionDealCode","value":"OPN"},
+            {"op":"==","key":"inputMediumId","value":"IB127"}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"transactionDealCode","value":"FTR"},
+            {"op":"==","key":"inputMediumId","value":"IB001"}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+
+ {
+    "if":{
+        "AND":[
+            {"op":"contains","key":"inputMediumId","value":["IB130","AF140","SS375"]}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"systemCode","value":"LS"},
+            {"op":"==","key":"transactionDealCode","value":"PYM"}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+ 
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"systemCode","value":"TD"}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"systemCode","value":"DD"},
+            {"op":"contains","key":"transactionDealCode","value":["TFD","SPD","FXD"]}
+        ]
+    },"then":{
+        "Payment_Type":"Transfer"
+    }
+ },
+
+
+ {
+    "if":{
+        "AND":[
+            {"op":"contains","key":"transactionCaptureWorkstation","value":["ZOIY","ZOAH"]}
+        ]
+    },"then":{
+        "Payment_Type":"Standing Order"
+    }
+ },
+
+ {
+    "if":{
+        "AND":[
+            {"op":"==","key":"transactionCaptureWorkstation","value":"ZOIZ"}
+        ]
+    },"then":{
+        "Payment_Type":"DirectDebit"
+    }
+ }
+
+
+]
+
+
+
+
+# ------------------------------
+# Rule Evaluation Engine
+# ------------------------------
+
+def evaluate_condition(record, condition):
+    if "AND" in condition:
+        return all(evaluate_condition(record, sub) for sub in condition["AND"])
+    elif "OR" in condition:
+        return any(evaluate_condition(record, sub) for sub in condition["OR"])
+    elif "op" in condition:
+        op = condition["op"]
+        key = condition["key"]
+        value = condition["value"]
+        actual = record.get(key)
+
+        if op == "==":
+            return actual == value
+        elif op == "!=":
+            return actual != value
+        elif op == "in":
+            return actual in value if isinstance(value, list) else False
+        elif op == "not in":
+            return actual not in value if isinstance(value, list) else False
+        elif op == "contains":
+            if isinstance(value, list):
+                return actual in value
+            return value in actual if isinstance(actual, str) else False
+        elif op == "startswith":
+            return actual.startswith(value) if isinstance(actual, str) else False
+        elif op == "not startswith":
+            return not actual.startswith(value) if isinstance(actual, str) else False
+        else:
+            raise ValueError(f"Unsupported operator: {op}")
+    else:
+        raise ValueError("Invalid condition format")
+
+def apply_rules(record, rules):
+    for rule in rules:
+        if evaluate_condition(record, rule.get("if", {})):
+            for key, value in rule.get("then", {}).items():
+                record[key] = value
+            # Uncomment below line to stop after the first match:
+            # break
+    return record
+
+
+record = {
+    "transactionDealCode": "FTR",
+    "inputMediumId": "IB154",
+    "narrative1": "Global Transfer",
+    "transactionCaptureWorkstation": "ZOIZ",
+    "systemCode": "DD"
+}
+
+result = apply_rules(record, rules)
+print(result["Payment_Type"])  # Will show matched value
+
+
+
+
