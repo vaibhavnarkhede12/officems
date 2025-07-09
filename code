@@ -1,230 +1,88 @@
-rules=[
- {
-    "if":{
-        "AND":[
-            {
-               "AND":[
-                {"op":"==","key":"transactionDealCode","value":"PYM"},
-                {"op":"in","key":"inputMediumId","value":["IB180","IB001"]}
-               ]  
-            }
-        ]
-    },"then":{
-        "Payment_Type":"Payment"
-    }
- },
+import re
 
- 
- {
-    "if":{
-        "AND":[
-            {"op":"contains","key":"transactionDealCode","value":["TT","TTI"]}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"contains","key":"transactionDealCode","value":["FTR","TFD","SPD"]},
-            {"op":"contains","key":"inputMediumId","value":["IB185","IB154"]},
-            {"op":"startswith","key":"narrative1","value":"TT"}
-        ]
-    },"then":{
-        "Payment_Type":"Payment"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"inputMediumId","value":"SS197FX"},
-        ]
-    },"then":{
-        "Payment_Type":"Payment"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"transactionDealCode","value":"FTR"},
-            {"op":"==","key":"narrative1","value":"Global Transfer"}
-        ]
-    },"then":{
-        "Payment_Type":"Payment"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"transactionDealCode","value":"FTR"},
-            {"op":"in","key":"inputMediumId","value":["IB185","IB154"]},
-            {"op":"not startswith","key":"narrative1","value":"TT"}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"transactionDealCode","value":"OPN"},
-            {"op":"==","key":"inputMediumId","value":"IB127"}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"transactionDealCode","value":"FTR"},
-            {"op":"==","key":"inputMediumId","value":"IB001"}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
- {
-    "if":{
-        "AND":[
-            {"op":"contains","key":"inputMediumId","value":["IB130","AF140","SS375"]}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"systemCode","value":"LS"},
-            {"op":"==","key":"transactionDealCode","value":"PYM"}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
- 
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"systemCode","value":"TD"}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"systemCode","value":"DD"},
-            {"op":"contains","key":"transactionDealCode","value":["TFD","SPD","FXD"]}
-        ]
-    },"then":{
-        "Payment_Type":"Transfer"
-    }
- },
-
-
- {
-    "if":{
-        "AND":[
-            {"op":"contains","key":"transactionCaptureWorkstation","value":["ZOIY","ZOAH"]}
-        ]
-    },"then":{
-        "Payment_Type":"Standing Order"
-    }
- },
-
- {
-    "if":{
-        "AND":[
-            {"op":"==","key":"transactionCaptureWorkstation","value":"ZOIZ"}
-        ]
-    },"then":{
-        "Payment_Type":"DirectDebit"
-    }
- }
-
-
-]
-
-
-
-
-# ------------------------------
-# Rule Evaluation Engine
-# ------------------------------
-
-def evaluate_condition(record, condition):
-    if "AND" in condition:
-        return all(evaluate_condition(record, sub) for sub in condition["AND"])
-    elif "OR" in condition:
-        return any(evaluate_condition(record, sub) for sub in condition["OR"])
-    elif "op" in condition:
-        op = condition["op"]
-        key = condition["key"]
-        value = condition["value"]
-        actual = record.get(key)
-
-        if op == "==":
-            return actual == value
-        elif op == "!=":
-            return actual != value
-        elif op == "in":
-            return actual in value if isinstance(value, list) else False
-        elif op == "not in":
-            return actual not in value if isinstance(value, list) else False
-        elif op == "contains":
-            if isinstance(value, list):
-                return actual in value
-            return value in actual if isinstance(actual, str) else False
-        elif op == "startswith":
-            return actual.startswith(value) if isinstance(actual, str) else False
-        elif op == "not startswith":
-            return not actual.startswith(value) if isinstance(actual, str) else False
-        else:
-            raise ValueError(f"Unsupported operator: {op}")
-    else:
-        raise ValueError("Invalid condition format")
-
-def apply_rules(record, rules):
-    for rule in rules:
-        if evaluate_condition(record, rule.get("if", {})):
-            for key, value in rule.get("then", {}).items():
-                record[key] = value
-            # Uncomment below line to stop after the first match:
-            # break
-    return record
-
-
-record = {
-    "transactionDealCode": "FTR",
-    "inputMediumId": "IB154",
-    "narrative1": "Global Transfer",
-    "transactionCaptureWorkstation": "ZOIZ",
-    "systemCode": "DD"
+# Sample input row (can come from a CSV, DB, etc.)
+row = {
+    "txncode": "17",
+    "inputmedium": 99,
+    "narrative1": "TTY",
+    "amount": 500
 }
 
-result = apply_rules(record, rules)
-print(result["Payment_Type"])  # Will show matched value
+# List of conditions: each is a dict with a column, operator, and expected value
+conditions = [
+    {"key": "txncode", "op": "==", "value": "17"},       # condition 0
+    {"key": "amount", "op": "gt", "value": 100},         # condition 1
+    {"key": "amount", "op": "lt", "value": 1000},        # condition 2
+]
 
+# Logical expression: combine conditions using their indices
+expression = "0 AND (1 AND 2)"
 
+# Function to evaluate a single condition against the row
+def evaluate_condition(row, cond):
+    val = row.get(cond["key"], "")
+    op = cond["op"]
+    match_val = cond["value"]
 
+    try:
+        if op == "==":
+            return val == match_val
+        elif op == "!=":
+            return val != match_val
+        elif op == "in":
+            return val in match_val
+        elif op == "notIn":
+            return val not in match_val
+        elif op == "startsWith":
+            return str(val).startswith(str(match_val))
+        elif op == "notStartsWith":
+            return not str(val).startswith(str(match_val))
+        elif op == "endsWith":
+            return str(val).endswith(str(match_val))
+        elif op == "regex":
+            return bool(re.search(match_val, str(val)))
+        elif op == "gt":
+            return float(val) > float(match_val)
+        elif op == "lt":
+            return float(val) < float(match_val)
+        elif op == "gte":
+            return float(val) >= float(match_val)
+        elif op == "lte":
+            return float(val) <= float(match_val)
+        else:
+            raise ValueError(f"Unsupported op: {op}")
+    except (ValueError, TypeError) as e:
+        print(f"Error evaluating condition {cond}: {e}")
+        return False
 
+# Function to evaluate full expression
+def evaluate_expression(row, conditions, expression):
+    print("==== Evaluating Conditions ====")
+    results = {}
+
+    # Step 1: Evaluate all conditions and map them to results
+    for idx, cond in enumerate(conditions):
+        result = evaluate_condition(row, cond)
+        results[str(idx)] = result
+        print(f"Condition {idx}: {cond['key']} {cond['op']} {cond['value']} → {result}")
+
+    # Step 2: Replace condition indices in the expression with their results
+    expr_eval = expression
+    print("\n==== Substituting Condition Results ====")
+    for k, v in results.items():
+        expr_eval = expr_eval.replace(k, str(v))
+        print(f"Replaced {k} with {v} → {expr_eval}")
+
+    # Step 3: Replace AND/OR with Python logical operators
+    expr_eval = expr_eval.replace("AND", "and").replace("OR", "or")
+    print(f"\nFinal expression to evaluate: {expr_eval}")
+
+    # Step 4: Evaluate final expression using Python's eval
+    final_result = eval(expr_eval)
+    print(f"\n==== Final Result ====")
+    print(f"Expression Result: {final_result}")
+    return final_result
+
+# Run evaluation
+result = evaluate_expression(row, conditions, expression)
+print("\nMatch Result:", result)
