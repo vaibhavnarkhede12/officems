@@ -1,88 +1,55 @@
-import re
+import subprocess
+import json
 
-# Sample input row (can come from a CSV, DB, etc.)
-row = {
-    "txncode": "17",
-    "inputmedium": 99,
-    "narrative1": "TTY",
-    "amount": 500
-}
-
-# List of conditions: each is a dict with a column, operator, and expected value
-conditions = [
-    {"key": "txncode", "op": "==", "value": "17"},       # condition 0
-    {"key": "amount", "op": "gt", "value": 100},         # condition 1
-    {"key": "amount", "op": "lt", "value": 1000},        # condition 2
+# List of GCP project IDs
+projects = [
+    'your-project-id-1',
+    'your-project-id-2',
+    # Add more project IDs
 ]
 
-# Logical expression: combine conditions using their indices
-expression = "0 AND (1 AND 2)"
-
-# Function to evaluate a single condition against the row
-def evaluate_condition(row, cond):
-    val = row.get(cond["key"], "")
-    op = cond["op"]
-    match_val = cond["value"]
-
+def run_gcloud_cmd(cmd):
     try:
-        if op == "==":
-            return val == match_val
-        elif op == "!=":
-            return val != match_val
-        elif op == "in":
-            return val in match_val
-        elif op == "notIn":
-            return val not in match_val
-        elif op == "startsWith":
-            return str(val).startswith(str(match_val))
-        elif op == "notStartsWith":
-            return not str(val).startswith(str(match_val))
-        elif op == "endsWith":
-            return str(val).endswith(str(match_val))
-        elif op == "regex":
-            return bool(re.search(match_val, str(val)))
-        elif op == "gt":
-            return float(val) > float(match_val)
-        elif op == "lt":
-            return float(val) < float(match_val)
-        elif op == "gte":
-            return float(val) >= float(match_val)
-        elif op == "lte":
-            return float(val) <= float(match_val)
-        else:
-            raise ValueError(f"Unsupported op: {op}")
-    except (ValueError, TypeError) as e:
-        print(f"Error evaluating condition {cond}: {e}")
-        return False
+        output = subprocess.check_output(cmd, shell=True, text=True)
+        return json.loads(output)
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed: {cmd}\n{e}")
+        return []
 
-# Function to evaluate full expression
-def evaluate_expression(row, conditions, expression):
-    print("==== Evaluating Conditions ====")
-    results = {}
+def get_instances(project):
+    cmd = f"gcloud compute instances list --project={project} --format=json"
+    return run_gcloud_cmd(cmd)
 
-    # Step 1: Evaluate all conditions and map them to results
-    for idx, cond in enumerate(conditions):
-        result = evaluate_condition(row, cond)
-        results[str(idx)] = result
-        print(f"Condition {idx}: {cond['key']} {cond['op']} {cond['value']} → {result}")
+def get_instance_group_instances(project):
+    cmd = f"gcloud compute instance-groups list --project={project} --format=json"
+    mig_instances = set()
 
-    # Step 2: Replace condition indices in the expression with their results
-    expr_eval = expression
-    print("\n==== Substituting Condition Results ====")
-    for k, v in results.items():
-        expr_eval = expr_eval.replace(k, str(v))
-        print(f"Replaced {k} with {v} → {expr_eval}")
+    groups = run_gcloud_cmd(cmd)
+    for group in groups:
+        if group.get("instanceGroupType") == "MANAGED":
+            zone = group.get("zone", "").split("/")[-1]
+            group_name = group["name"]
+            cmd_detail = (
+                f"gcloud compute instance-groups managed list-instances {group_name} "
+                f"--zone={zone} --project={project} --format=json"
+            )
+            instances = run_gcloud_cmd(cmd_detail)
+            for inst in instances:
+                mig_instances.add(inst["instance"].split("/")[-1])
 
-    # Step 3: Replace AND/OR with Python logical operators
-    expr_eval = expr_eval.replace("AND", "and").replace("OR", "or")
-    print(f"\nFinal expression to evaluate: {expr_eval}")
+    return mig_instances
 
-    # Step 4: Evaluate final expression using Python's eval
-    final_result = eval(expr_eval)
-    print(f"\n==== Final Result ====")
-    print(f"Expression Result: {final_result}")
-    return final_result
+def find_non_mig_instances():
+    for project in projects:
+        print(f"\n🔍 Project: {project}")
+        all_instances = get_instances(project)
+        mig_instance_names = get_instance_group_instances(project)
 
-# Run evaluation
-result = evaluate_expression(row, conditions, expression)
-print("\nMatch Result:", result)
+        for inst in all_instances:
+            name = inst['name']
+            zone = inst['zone'].split('/')[-1]
+            if name not in mig_instance_names:
+                print(f"➡️  Non-MIG Instance: {name} (zone: {zone})")
+
+if __name__ == "__main__":
+    find_non_mig_instances()
