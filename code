@@ -1,25 +1,49 @@
-def get_instance_group_instances(project):
-    print(f"🔄 Fetching instance groups for project: {project}")
-    cmd = f"gcloud compute instance-groups managed list --project={project} --format=json"
-    groups = run_gcloud_cmd(cmd)
-    mig_instances = set()
+#!/bin/bash
 
-    for group in groups:
-        group_name = group["name"]
-        location = group.get("zone") or group.get("region")
-        location_type = "zone" if "zone" in group else "region"
-        location_val = location.split("/")[-1]
+# List of project IDs
+PROJECTS=(
+  "your-project-id-1"
+  "your-project-id-2"
+)
 
-        print(f"➡️  Found MIG: {group_name} ({location_type}: {location_val})")
+for PROJECT in "${PROJECTS[@]}"; do
+  echo "🔍 Project: $PROJECT"
+  
+  # Get all instance names with zone
+  echo "➡️  Fetching all instances..."
+  ALL_INSTANCES=$(gcloud compute instances list --project="$PROJECT" --format="table[no-heading](name, zone.basename())")
+  
+  # Declare an associative array for MIG instances
+  declare -A MIG_INSTANCES
 
-        cmd_detail = (
-            f"gcloud compute instance-groups managed list-instances {group_name} "
-            f"--{location_type}={location_val} --project={project} --format=json"
-        )
-        instances = run_gcloud_cmd(cmd_detail)
-        for inst in instances:
-            instance_name = inst["instance"].split("/")[-1]
-            print(f"    ↪️ Instance in MIG: {instance_name}")
-            mig_instances.add(instance_name)
+  # Get all MIGs (zonal and regional)
+  echo "➡️  Fetching managed instance groups..."
+  MIGS=$(gcloud compute instance-groups managed list --project="$PROJECT" --format="json")
 
-    return mig_instances
+  echo "$MIGS" | jq -c '.[]' | while read -r GROUP; do
+    NAME=$(echo "$GROUP" | jq -r '.name')
+    LOCATION=$(echo "$GROUP" | jq -r '.zone // .region')
+    LOC_TYPE=$(echo "$LOCATION" | grep -q '/zones/' && echo "zone" || echo "region")
+    LOC_NAME=$(basename "$LOCATION")
+
+    echo "   🔁 MIG: $NAME ($LOC_TYPE: $LOC_NAME)"
+    
+    # List instances in the MIG
+    INSTANCES=$(gcloud compute instance-groups managed list-instances "$NAME" \
+      --"$LOC_TYPE"="$LOC_NAME" \
+      --project="$PROJECT" --format="value(instance.basename())")
+
+    for INST in $INSTANCES; do
+      MIG_INSTANCES["$INST"]=1
+    done
+  done
+
+  echo "➡️  Checking for non-MIG instances..."
+  while read -r VM_NAME VM_ZONE; do
+    if [[ -z "${MIG_INSTANCES[$VM_NAME]}" ]]; then
+      echo "🚫 Non-MIG instance: $VM_NAME (zone: $VM_ZONE)"
+    fi
+  done <<< "$ALL_INSTANCES"
+
+  echo
+done
