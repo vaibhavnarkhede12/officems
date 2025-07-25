@@ -1,49 +1,45 @@
 #!/bin/bash
 
-# List of project IDs
-PROJECTS=(
-  "your-project-id-1"
-  "your-project-id-2"
-)
+# List of GCP project IDs
+PROJECTS=("your-project-id-1" "your-project-id-2")
 
 for PROJECT in "${PROJECTS[@]}"; do
   echo "🔍 Project: $PROJECT"
-  
-  # Get all instance names with zone
-  echo "➡️  Fetching all instances..."
-  ALL_INSTANCES=$(gcloud compute instances list --project="$PROJECT" --format="table[no-heading](name, zone.basename())")
-  
-  # Declare an associative array for MIG instances
-  declare -A MIG_INSTANCES
 
-  # Get all MIGs (zonal and regional)
-  echo "➡️  Fetching managed instance groups..."
-  MIGS=$(gcloud compute instance-groups managed list --project="$PROJECT" --format="json")
+  # Get all VMs in the project
+  echo "➡️  Fetching all VM instances..."
+  ALL_VMS=$(gcloud compute instances list --project="$PROJECT" --format="table[no-heading](name, zone.basename())")
+
+  declare -A MIG_INSTANCE_MAP
+
+  echo "➡️  Fetching all managed instance groups..."
+  MIGS=$(gcloud compute instance-groups managed list --project="$PROJECT" --format=json)
 
   echo "$MIGS" | jq -c '.[]' | while read -r GROUP; do
     NAME=$(echo "$GROUP" | jq -r '.name')
     LOCATION=$(echo "$GROUP" | jq -r '.zone // .region')
-    LOC_TYPE=$(echo "$LOCATION" | grep -q '/zones/' && echo "zone" || echo "region")
-    LOC_NAME=$(basename "$LOCATION")
+    LOCATION_TYPE=$(echo "$LOCATION" | grep -q "/zones/" && echo "zone" || echo "region")
+    LOCATION_VALUE=$(basename "$LOCATION")
 
-    echo "   🔁 MIG: $NAME ($LOC_TYPE: $LOC_NAME)"
-    
-    # List instances in the MIG
-    INSTANCES=$(gcloud compute instance-groups managed list-instances "$NAME" \
-      --"$LOC_TYPE"="$LOC_NAME" \
-      --project="$PROJECT" --format="value(instance.basename())")
+    echo "   🔁 MIG: $NAME ($LOCATION_TYPE: $LOCATION_VALUE)"
 
-    for INST in $INSTANCES; do
-      MIG_INSTANCES["$INST"]=1
+    # List instances in MIG
+    INSTANCE_LIST=$(gcloud compute instance-groups managed list-instances "$NAME" \
+      --"$LOCATION_TYPE"="$LOCATION_VALUE" \
+      --project="$PROJECT" \
+      --format="value(instance.basename())")
+
+    for INSTANCE in $INSTANCE_LIST; do
+      MIG_INSTANCE_MAP["$INSTANCE"]=1
     done
   done
 
-  echo "➡️  Checking for non-MIG instances..."
+  echo "➡️  Comparing against standalone instances..."
   while read -r VM_NAME VM_ZONE; do
-    if [[ -z "${MIG_INSTANCES[$VM_NAME]}" ]]; then
+    if [[ -z "${MIG_INSTANCE_MAP[$VM_NAME]}" ]]; then
       echo "🚫 Non-MIG instance: $VM_NAME (zone: $VM_ZONE)"
     fi
-  done <<< "$ALL_INSTANCES"
+  done <<< "$ALL_VMS"
 
-  echo
+  echo ""
 done
