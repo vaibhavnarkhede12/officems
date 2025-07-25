@@ -1,55 +1,25 @@
-import subprocess
-import json
-
-# List of GCP project IDs
-projects = [
-    'your-project-id-1',
-    'your-project-id-2',
-    # Add more project IDs
-]
-
-def run_gcloud_cmd(cmd):
-    try:
-        output = subprocess.check_output(cmd, shell=True, text=True)
-        return json.loads(output)
-    except subprocess.CalledProcessError as e:
-        print(f"Command failed: {cmd}\n{e}")
-        return []
-
-def get_instances(project):
-    cmd = f"gcloud compute instances list --project={project} --format=json"
-    return run_gcloud_cmd(cmd)
-
 def get_instance_group_instances(project):
-    cmd = f"gcloud compute instance-groups list --project={project} --format=json"
+    print(f"🔄 Fetching instance groups for project: {project}")
+    cmd = f"gcloud compute instance-groups managed list --project={project} --format=json"
+    groups = run_gcloud_cmd(cmd)
     mig_instances = set()
 
-    groups = run_gcloud_cmd(cmd)
     for group in groups:
-        if group.get("instanceGroupType") == "MANAGED":
-            zone = group.get("zone", "").split("/")[-1]
-            group_name = group["name"]
-            cmd_detail = (
-                f"gcloud compute instance-groups managed list-instances {group_name} "
-                f"--zone={zone} --project={project} --format=json"
-            )
-            instances = run_gcloud_cmd(cmd_detail)
-            for inst in instances:
-                mig_instances.add(inst["instance"].split("/")[-1])
+        group_name = group["name"]
+        location = group.get("zone") or group.get("region")
+        location_type = "zone" if "zone" in group else "region"
+        location_val = location.split("/")[-1]
+
+        print(f"➡️  Found MIG: {group_name} ({location_type}: {location_val})")
+
+        cmd_detail = (
+            f"gcloud compute instance-groups managed list-instances {group_name} "
+            f"--{location_type}={location_val} --project={project} --format=json"
+        )
+        instances = run_gcloud_cmd(cmd_detail)
+        for inst in instances:
+            instance_name = inst["instance"].split("/")[-1]
+            print(f"    ↪️ Instance in MIG: {instance_name}")
+            mig_instances.add(instance_name)
 
     return mig_instances
-
-def find_non_mig_instances():
-    for project in projects:
-        print(f"\n🔍 Project: {project}")
-        all_instances = get_instances(project)
-        mig_instance_names = get_instance_group_instances(project)
-
-        for inst in all_instances:
-            name = inst['name']
-            zone = inst['zone'].split('/')[-1]
-            if name not in mig_instance_names:
-                print(f"➡️  Non-MIG Instance: {name} (zone: {zone})")
-
-if __name__ == "__main__":
-    find_non_mig_instances()
