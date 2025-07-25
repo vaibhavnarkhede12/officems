@@ -48,4 +48,9 @@ for PROJECT in "${PROJECTS[@]}"; do
     VM_ZONE=$(awk '{print $2}' <<< "$LINE")
 
     if [[ -z "${MIG_INSTANCES[$VM_NAME]}" ]]; then
-      echo "🚫
+      echo "🚫 Non-MIG instance: $VM_NAME (zone: $VM_ZONE)"
+    fi
+  done
+
+  echo ""
+done
