@@ -1,56 +1,19 @@
-#!/bin/bash
+pipeline {
+    agent any
 
-# List of GCP project IDs
-PROJECTS=("your-project-id-1" "your-project-id-2")
+    stages {
+        stage('Prepare Script') {
+            steps {
+                echo 'Setting executable permission for the script...'
+                sh 'chmod +x myscript.sh'
+            }
+        }
 
-# Make sure jq is installed
-command -v jq >/dev/null 2>&1 || { echo >&2 "jq is required but not installed. Aborting."; exit 1; }
-
-for PROJECT in "${PROJECTS[@]}"; do
-  echo "🔍 Project: $PROJECT"
-
-  # Get all VM instances
-  echo "➡️  Fetching all instances..."
-  mapfile -t ALL_VMS < <(gcloud compute instances list \
-    --project="$PROJECT" \
-    --format="table[no-heading](name, zone.basename())")
-
-  # Declare global associative array outside loop
-  declare -A MIG_INSTANCES
-
-  # Fetch all MIGs (regional and zonal)
-  MIGS_JSON=$(gcloud compute instance-groups managed list --project="$PROJECT" --format=json)
-
-  # Use jq to extract relevant MIG details
-  MIG_COUNT=$(echo "$MIGS_JSON" | jq length)
-  for ((i = 0; i < MIG_COUNT; i++)); do
-    GROUP_NAME=$(echo "$MIGS_JSON" | jq -r ".[$i].name")
-    LOCATION=$(echo "$MIGS_JSON" | jq -r ".[$i].zone // .[$i].region")
-    LOCATION_TYPE=$(echo "$LOCATION" | grep -q "/zones/" && echo "zone" || echo "region")
-    LOCATION_NAME=$(basename "$LOCATION")
-
-    echo "   🔁 MIG: $GROUP_NAME ($LOCATION_TYPE: $LOCATION_NAME)"
-
-    # Get all instances in this MIG
-    mapfile -t INSTANCES < <(gcloud compute instance-groups managed list-instances "$GROUP_NAME" \
-      --"$LOCATION_TYPE"="$LOCATION_NAME" \
-      --project="$PROJECT" \
-      --format="value(instance.basename())")
-
-    for VM in "${INSTANCES[@]}"; do
-      MIG_INSTANCES["$VM"]=1
-    done
-  done
-
-  echo "➡️  Checking for non-MIG instances..."
-  for LINE in "${ALL_VMS[@]}"; do
-    VM_NAME=$(awk '{print $1}' <<< "$LINE")
-    VM_ZONE=$(awk '{print $2}' <<< "$LINE")
-
-    if [[ -z "${MIG_INSTANCES[$VM_NAME]}" ]]; then
-      echo "🚫 Non-MIG instance: $VM_NAME (zone: $VM_ZONE)"
-    fi
-  done
-
-  echo ""
-done
+        stage('Run Script') {
+            steps {
+                echo 'Running the script...'
+                sh './myscript.sh'
+            }
+        }
+    }
+}
