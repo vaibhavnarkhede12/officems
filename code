@@ -1,19 +1,17 @@
-pipeline {
-    agent any
+# C:\startup\disk-setup.ps1
 
-    stages {
-        stage('Prepare Script') {
-            steps {
-                echo 'Setting executable permission for the script...'
-                sh 'chmod +x myscript.sh'
-            }
-        }
+$uninitializedDisks = Get-Disk | Where-Object { $_.PartitionStyle -eq 'RAW' }
 
-        stage('Run Script') {
-            steps {
-                echo 'Running the script...'
-                sh './myscript.sh'
-            }
-        }
+foreach ($disk in $uninitializedDisks) {
+    Initialize-Disk -Number $disk.Number -PartitionStyle GPT -PassThru |
+    New-Partition -UseMaximumSize -AssignDriveLetter |
+    Format-Volume -FileSystem NTFS -NewFileSystemLabel "DataDisk" -Confirm:$false
+}
+
+# If D: is not in use, reassign the newly formatted disk to D:
+$vols = Get-Volume | Where-Object { $_.FileSystemLabel -eq "DataDisk" }
+foreach ($vol in $vols) {
+    if ((Get-Volume -DriveLetter D -ErrorAction SilentlyContinue) -eq $null) {
+        Set-Partition -DriveLetter $vol.DriveLetter -NewDriveLetter D
     }
 }
