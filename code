@@ -1,17 +1,15 @@
-# C:\startup\disk-setup.ps1
+Subject: Update on HK Northstar Setup Progress
 
-$uninitializedDisks = Get-Disk | Where-Object { $_.PartitionStyle -eq 'RAW' }
+Team,
 
-foreach ($disk in $uninitializedDisks) {
-    Initialize-Disk -Number $disk.Number -PartitionStyle GPT -PassThru |
-    New-Partition -UseMaximumSize -AssignDriveLetter |
-    Format-Volume -FileSystem NTFS -NewFileSystemLabel "DataDisk" -Confirm:$false
-}
+Regarding the current progress on the HK Northstar setup:
 
-# If D: is not in use, reassign the newly formatted disk to D:
-$vols = Get-Volume | Where-Object { $_.FileSystemLabel -eq "DataDisk" }
-foreach ($vol in $vols) {
-    if ((Get-Volume -DriveLetter D -ErrorAction SilentlyContinue) -eq $null) {
-        Set-Partition -DriveLetter $vol.DriveLetter -NewDriveLetter D
-    }
-}
+Due to certain issues in the HK pre-prod project—stemming from an incomplete setup in pre-prod and SOT deployment challenges (which were not encountered in other projects as they were already fully set up and operational)—the pre-prod environment is now expected to be completed by 23 August.
+Resolving these issues requires raising GCPOPS tickets and submitting change orders for each error identified.
+
+To avoid impacting production timelines due to pre-production delays, we will proceed with the production setup in parallel. We do not anticipate facing the same issues in production, as the environment is already in use by HK SVS and should not encounter similar conflicts.
+We expect the production setup to be completed by 8 September.
+
+Regards,
+[Your Name]
+
