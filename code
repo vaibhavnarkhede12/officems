@@ -1,15 +1,34 @@
-Subject: Update on HK Northstar Setup Progress
+pipeline {
+    agent any
 
-Team,
+    parameters {
+        string(name: 'FILE_NAME', description: 'Name of the file in the repo to upload')
+        string(name: 'GCS_PATH', description: 'Full GCS path like gs://bucket-name/path/')
+    }
 
-Regarding the current progress on the HK Northstar setup:
+    stages {
+        stage('Checkout Repo') {
+            steps {
+                // Checkout your Git repo
+                checkout scm
+            }
+        }
 
-Due to certain issues in the HK pre-prod project—stemming from an incomplete setup in pre-prod and SOT deployment challenges (which were not encountered in other projects as they were already fully set up and operational)—the pre-prod environment is now expected to be completed by 23 August.
-Resolving these issues requires raising GCPOPS tickets and submitting change orders for each error identified.
+        stage('Upload to GCS') {
+            steps {
+                script {
+                    // Check if file exists
+                    if (!fileExists(params.FILE_NAME)) {
+                        error "File '${params.FILE_NAME}' not found in repo"
+                    }
 
-To avoid impacting production timelines due to pre-production delays, we will proceed with the production setup in parallel. We do not anticipate facing the same issues in production, as the environment is already in use by HK SVS and should not encounter similar conflicts.
-We expect the production setup to be completed by 8 September.
-
-Regards,
-[Your Name]
-
+                    // Run gsutil copy
+                    sh """
+                        echo "Uploading ${params.FILE_NAME} to ${params.GCS_PATH}..."
+                        gsutil cp "${params.FILE_NAME}" "${params.GCS_PATH}"
+                    """
+                }
+            }
+        }
+    }
+}
