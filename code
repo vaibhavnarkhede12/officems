@@ -1,34 +1,9 @@
-pipeline {
-    agent any
-
-    parameters {
-        string(name: 'FILE_NAME', description: 'Name of the file in the repo to upload')
-        string(name: 'GCS_PATH', description: 'Full GCS path like gs://bucket-name/path/')
-    }
-
-    stages {
-        stage('Checkout Repo') {
-            steps {
-                // Checkout your Git repo
-                checkout scm
-            }
-        }
-
-        stage('Upload to GCS') {
-            steps {
-                script {
-                    // Check if file exists
-                    if (!fileExists(params.FILE_NAME)) {
-                        error "File '${params.FILE_NAME}' not found in repo"
-                    }
-
-                    // Run gsutil copy
-                    sh """
-                        echo "Uploading ${params.FILE_NAME} to ${params.GCS_PATH}..."
-                        gsutil cp "${params.FILE_NAME}" "${params.GCS_PATH}"
-                    """
-                }
-            }
-        }
-    }
-}
+1. Cloudrun and alloydb business 
+2. Cloudrun and alloydb technical components.
+2. Explain what is psc.
+2. Explain architecture in short
+3. Explain GitHub code structure and creation of images 
+4. Explain alloydb in detail
+5. Explain cloudrun in detail
+6. Explain improvements 
+7. Explain future scope and how project needs to maintained
