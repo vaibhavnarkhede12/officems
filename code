@@ -7,3 +7,132 @@
 5. Explain cloudrun in detail
 6. Explain improvements 
 7. Explain future scope and how project needs to maintained
+
+from pptx import Presentation
+from pptx.util import Inches, Pt
+
+# Create a new presentation
+prs = Presentation()
+
+# Layouts
+title_slide_layout = prs.slide_layouts[0]
+bullet_slide_layout = prs.slide_layouts[1]
+blank_slide_layout = prs.slide_layouts[6]
+
+# --- Slide 1: Title ---
+slide = prs.slides.add_slide(title_slide_layout)
+slide.shapes.title.text = "Modern Banking API Platform on GCP"
+slide.placeholders[1].text = "Using Cloud Run & AlloyDB to Scale Java APIs\nPresented by: Your Name"
+
+# --- Slide 2: Business Context ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Business Context"
+content = slide.placeholders[1].text_frame
+content.text = "Need for scalable, secure, and cost-efficient banking APIs"
+for point in [
+    "Handling 10K transactions per minute (TPM) reliably",
+    "Ensuring performance for digital banking customers",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 3: Current Challenges ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Current Challenges"
+content = slide.placeholders[1].text_frame
+content.text = "Traditional infrastructure = high cost, low elasticity"
+for point in [
+    "Scaling delays impact customer experience",
+    "Managing DB consistency & availability at scale",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 4: Architecture Overview (simple diagram) ---
+slide = prs.slides.add_slide(blank_slide_layout)
+title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(9), Inches(1))
+title_tf = title_box.text_frame
+title_tf.text = "Proposed Architecture Overview"
+
+shapes = slide.shapes
+# Customers
+cust = shapes.add_shape(1, Inches(0.5), Inches(2), Inches(2), Inches(1))
+cust.text = "Customers"
+# API Gateway
+apig = shapes.add_shape(1, Inches(3), Inches(2), Inches(2), Inches(1))
+apig.text = "API Gateway / LB"
+# Cloud Run
+crun = shapes.add_shape(1, Inches(5.5), Inches(2), Inches(2), Inches(1))
+crun.text = "Cloud Run (Java APIs)"
+# AlloyDB
+adb = shapes.add_shape(1, Inches(8), Inches(2), Inches(2), Inches(1))
+adb.text = "AlloyDB"
+
+# --- Slide 5: Why Cloud Run ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Why Cloud Run?"
+content = slide.placeholders[1].text_frame
+content.text = "Serverless → auto-scaling for peak load"
+for point in [
+    "Cost efficiency (pay per use)",
+    "Secure and integrates with GCP services",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 6: Why AlloyDB ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Why AlloyDB?"
+content = slide.placeholders[1].text_frame
+content.text = "High throughput suitable for 10K TPM"
+for point in [
+    "Postgres-compatible → easy migration",
+    "Enterprise reliability & low-latency reads",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 7: Performance & Scale ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Performance & Scale"
+content = slide.placeholders[1].text_frame
+content.text = "Architecture tested for 10K+ TPM"
+for point in [
+    "Auto-scaling APIs during peak load",
+    "AlloyDB read pools ensure consistent DB performance",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 8: Business Value ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Business Value"
+content = slide.placeholders[1].text_frame
+content.text = "Faster go-to-market for new banking products"
+for point in [
+    "Reduced operational cost via serverless model",
+    "Improved customer experience (fast, reliable APIs)",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 9: Future Enhancements ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Future Enhancements"
+content = slide.placeholders[1].text_frame
+content.text = "AI-driven monitoring & alerting"
+for point in [
+    "Multi-region deployment for disaster recovery",
+    "Further API expansion",
+]:
+    p = content.add_paragraph()
+    p.text = point
+
+# --- Slide 10: Closing ---
+slide = prs.slides.add_slide(bullet_slide_layout)
+slide.shapes.title.text = "Q&A"
+slide.placeholders[1].text_frame.text = "Thank you!"
+
+# Save PPTX file
+prs.save("banking_api_cloudrun_alloydb_ready.pptx")
+print("✅ PPT created: banking_api_cloudrun_alloydb_ready.pptx")
