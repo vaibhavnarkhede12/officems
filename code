@@ -8,6 +8,37 @@
 6. Explain improvements 
 7. Explain future scope and how project needs to maintained
 
+Primary + Read Pools → AlloyDB supports read replicas that scale horizontally with the primary instance, distributing workload during peak 10K+ TPM traffic.
+
+Auto-Scaling Reads → Read pools expand or contract dynamically, ensuring consistent low-latency performance.
+
+Parallel Query Execution → High throughput for complex queries, optimized for real-time banking APIs.
+
+
+🔗 Low Latency & Connectivity
+
+Private Service Connect (PSC) → Direct, private, low-latency connections between Cloud Run and AlloyDB.
+
+No public exposure → Traffic stays within Google’s backbone network, ensuring security + speed.
+
+
+🛡️ Enterprise Reliability
+
+Automatic failover & replication → Continuous availability with minimal disruption.
+
+Strong security → Encryption at rest + in transit, IAM-based access control, VPC isolation.
+
+Fully managed service → Zero ops for patching, backups, or scaling.
+
+
+💡 Business Impact
+
+Predictable performance at scale → No customer disruption even during peak banking hours.
+
+Reduced latency → Faster transaction confirmations improves customer trust.
+
+Future ready → Scales with transaction growth without redesigning infrastructure.
+
 
 # Advanced PPT generator for:
 # "Modern Banking API Platform on GCP – Cloud Run + AlloyDB (Java APIs, ~10k TPM)"
