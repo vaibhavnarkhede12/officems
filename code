@@ -8,6 +8,13 @@
 6. Explain improvements 
 7. Explain future scope and how project needs to maintained
 
+
+
+-- Overall buffer cache hit ratio
+SELECT 
+  sum(blks_hit) / nullif(sum(blks_hit + blks_read), 0)::float AS cache_hit_ratio
+FROM pg_stat_database;
+
 Primary + Read Pools → AlloyDB supports read replicas that scale horizontally with the primary instance, distributing workload during peak 10K+ TPM traffic.
 
 Auto-Scaling Reads → Read pools expand or contract dynamically, ensuring consistent low-latency performance.
