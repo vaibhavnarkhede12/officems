@@ -1,487 +1,181 @@
-1. Cloudrun and alloydb business 
-2. Cloudrun and alloydb technical components.
-2. Explain what is psc.
-2. Explain architecture in short
-3. Explain GitHub code structure and creation of images 
-4. Explain alloydb in detail
-5. Explain cloudrun in detail
-6. Explain improvements 
-7. Explain future scope and how project needs to maintained
-
-
-
--- Overall buffer cache hit ratio
-SELECT 
-  sum(blks_hit) / nullif(sum(blks_hit + blks_read), 0)::float AS cache_hit_ratio
-FROM pg_stat_database;
-
-Primary + Read Pools → AlloyDB supports read replicas that scale horizontally with the primary instance, distributing workload during peak 10K+ TPM traffic.
-
-Auto-Scaling Reads → Read pools expand or contract dynamically, ensuring consistent low-latency performance.
-
-Parallel Query Execution → High throughput for complex queries, optimized for real-time banking APIs.
-
-
-🔗 Low Latency & Connectivity
-
-Private Service Connect (PSC) → Direct, private, low-latency connections between Cloud Run and AlloyDB.
-
-No public exposure → Traffic stays within Google’s backbone network, ensuring security + speed.
-
-
-🛡️ Enterprise Reliability
-
-Automatic failover & replication → Continuous availability with minimal disruption.
-
-Strong security → Encryption at rest + in transit, IAM-based access control, VPC isolation.
-
-Fully managed service → Zero ops for patching, backups, or scaling.
-
-
-💡 Business Impact
-
-Predictable performance at scale → No customer disruption even during peak banking hours.
-
-Reduced latency → Faster transaction confirmations improves customer trust.
-
-Future ready → Scales with transaction growth without redesigning infrastructure.
-
-
-# Advanced PPT generator for:
-# "Modern Banking API Platform on GCP – Cloud Run + AlloyDB (Java APIs, ~10k TPM)"
-#
-# Creates a polished, manager-friendly + technically credible deck:
-# - Consistent styling (color bars, typography)
-# - Architecture diagram (simple but complete)
-# - KPI table (TPM/SLOs/latency)
-# - Scale story (traffic vs autoscaling chart)
-# - Security & Compliance, Cost Model, Reliability, Observability
-# - Deployment pipeline & request lifecycle
-# - Risks & mitigations, roadmap
-#
-# Usage:
-#   pip install python-pptx
-#   python generate_banking_api_cloudrun_alloydb_advanced.py
-
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
-from pptx.enum.shapes import MSO_SHAPE, MSO_CONNECTOR
-from pptx.enum.dml import MSO_LINE
-from pptx.chart.data import CategoryChartData
-from pptx.enum.chart import XL_CHART_TYPE
-
-# ---- Brand-ish palette (clean & modern) ----
-PRIMARY = RGBColor(26, 115, 232)   # blue
-ACCENT1 = RGBColor(52, 168, 83)    # green
-ACCENT2 = RGBColor(251, 188, 5)    # amber
-ACCENT3 = RGBColor(234, 67, 53)    # red
-DARK = RGBColor(32, 33, 36)        # near-black
-MUTED = RGBColor(95, 99, 104)      # gray
-LIGHT = RGBColor(248, 249, 250)    # near-white
-
-prs = Presentation()
-title_layout = prs.slide_layouts[0]
-title_and_content = prs.slide_layouts[1]
-section_header = prs.slide_layouts[2]
-blank = prs.slide_layouts[6]
-
-def add_header_bar(slide, text=None):
-    """Add a thin primary color bar and optional right-aligned header text."""
-    shape = slide.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), prs.slide_width, Inches(0.18)
-    )
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = PRIMARY
-    shape.line.fill.background()
-    if text:
-        tb = slide.shapes.add_textbox(prs.slide_width - Inches(5.5), Inches(0), Inches(5.3), Inches(0.35))
-        tf = tb.text_frame
-        p = tf.paragraphs[0]
-        run = p.add_run()
-        run.text = text
-        run.font.size = Pt(12)
-        run.font.color.rgb = LIGHT
-        p.alignment = PP_ALIGN.RIGHT
-
-def style_title(title_shape):
-    title_shape.text_frame.paragraphs[0].runs[0].font.size = Pt(36)
-    title_shape.text_frame.paragraphs[0].runs[0].font.bold = True
-    title_shape.text_frame.paragraphs[0].runs[0].font.color.rgb = DARK
-
-def add_bullets(slide, title, bullets, header_text=None):
-    slide.shapes.title.text = title
-    style_title(slide.shapes.title)
-    if header_text:
-        add_header_bar(slide, header_text)
-    body = slide.placeholders[1].text_frame
-    body.clear()
-    for i, b in enumerate(bullets):
-        if i == 0:
-            body.text = b
-        else:
-            p = body.add_paragraph()
-            p.text = b
-
-def add_callout(slide, text, x, y, w, h, fill=ACCENT1):
-    box = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h)
-    box.fill.solid()
-    box.fill.fore_color.rgb = fill
-    box.line.color.rgb = fill
-    tf = box.text_frame
-    tf.clear()
-    p = tf.paragraphs[0]
-    run = p.add_run()
-    run.text = text
-    run.font.size = Pt(14)
-    run.font.bold = True
-    run.font.color.rgb = RGBColor(255, 255, 255)
-    p.alignment = PP_ALIGN.CENTER
-    return box
-
-def add_group_label(slide, text, x, y, w, h, color=MUTED):
-    lbl = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h)
-    lbl.fill.solid()
-    lbl.fill.fore_color.rgb = color
-    lbl.line.color.rgb = color
-    tf = lbl.text_frame
-    tf.clear()
-    p = tf.paragraphs[0]
-    run = p.add_run()
-    run.text = text
-    run.font.size = Pt(12)
-    run.font.bold = True
-    run.font.color.rgb = LIGHT
-    p.alignment = PP_ALIGN.CENTER
-    return lbl
-
-def add_note(slide, text):
-    notes = slide.notes_slide
-    notes.notes_text_frame.text = text
-
-def add_table(slide, title, cols, rows, col_widths=None, header_text=None):
-    slide.shapes.title.text = title
-    style_title(slide.shapes.title)
-    if header_text:
-        add_header_bar(slide, header_text)
-    rows_n = len(rows) + 1
-    cols_n = len(cols)
-    left, top, width, height = Inches(0.8), Inches(1.8), Inches(12.8), Inches(4.5)
-    table_shape = slide.shapes.add_table(rows_n, cols_n, left, top, width, height)
-    table = table_shape.table
-    if col_widths:
-        for i, w in enumerate(col_widths):
-            table.columns[i].width = Inches(w)
-    # header
-    for i, c in enumerate(cols):
-        cell = table.cell(0, i)
-        cell.text = c
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = PRIMARY
-        cell.text_frame.paragraphs[0].runs[0].font.color.rgb = LIGHT
-        cell.text_frame.paragraphs[0].runs[0].font.bold = True
-    # rows
-    for r_idx, row in enumerate(rows, start=1):
-        for c_idx, val in enumerate(row):
-            table.cell(r_idx, c_idx).text = str(val)
-    return table
-
-# ----- Slide 1: Title -----
-s = prs.slides.add_slide(title_layout)
-s.shapes.title.text = "Modern Banking API Platform on GCP"
-s.placeholders[1].text = "Java APIs on Cloud Run • AlloyDB Backend • ~10K TPM\nPresenter: Your Name / Team"
-style_title(s.shapes.title)
-add_header_bar(s, "Cloud Run + AlloyDB • Banking APIs")
-
-# ----- Slide 2: Agenda -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Agenda",
-    [
-        "Business context & goals",
-        "Non-functional requirements (NFRs) & KPIs",
-        "Architecture overview (simple, complete)",
-        "Performance & autoscaling story",
-        "Security, Compliance & Reliability",
-        "Cost model & optimization levers",
-        "Deployment pipeline & observability",
-        "Risks, mitigations & roadmap",
-    ],
-    "Executive + Technical Overview",
-)
-
-# ----- Slide 3: Business Context -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Business Context",
-    [
-        "Serve digital banking channels with consistent, low-latency APIs",
-        "Scale to handle ~10K TPM with predictable performance",
-        "Reduce ops toil with serverless + managed services",
-        "Enable faster product rollout via CI/CD & traffic-splitting",
-    ],
-    "Value: Reliability • Speed • Cost Efficiency",
-)
-
-# ----- Slide 4: NFRs & KPIs -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Non-Functional Requirements (NFRs) & KPIs",
-    [
-        "Availability: 99.9%+ for core API surfaces",
-        "Latency: p95 < 200 ms (intra-region); p99 < 400 ms",
-        "Throughput: steady 10K TPM; burst handling via autoscaling",
-        "Security: IAM-based authn/authz; secrets rotation and least privilege",
-        "Compliance: data residency, encryption at rest & in transit",
-    ],
-    "Targets & Guardrails",
-)
-add_note(s, "Tune targets per product SLAs; show SLO dashboards to leadership.")
-
-# ----- Slide 5: Architecture Overview (diagram) -----
-s = prs.slides.add_slide(blank)
-add_header_bar(s, "Architecture Overview")
-
-# Group labels
-edge_lbl     = add_group_label(s, "Edge",        Inches(0.5), Inches(0.5), Inches(3.3), Inches(0.4))
-app_lbl      = add_group_label(s, "App Layer",   Inches(4.1), Inches(0.5), Inches(4.4), Inches(0.4))
-data_lbl     = add_group_label(s, "Data Layer",  Inches(8.9), Inches(0.5), Inches(3.0), Inches(0.4))
-obs_lbl      = add_group_label(s, "Observability / Security", Inches(0.5), Inches(5.3), Inches(11.4), Inches(0.4))
-
-# Edge
-cust  = add_callout(s, "Customers / Channels", Inches(0.5), Inches(1.1), Inches(3.3), Inches(0.8), fill=PRIMARY)
-apigw = add_callout(s, "API Gateway / LB\n(Cloud Load Balancer)", Inches(0.5), Inches(2.2), Inches(3.3), Inches(1.0), fill=ACCENT1)
-armor = add_callout(s, "Cloud Armor (WAF)\nRate limiting, IP controls", Inches(0.5), Inches(3.5), Inches(3.3), Inches(0.9), fill=ACCENT2)
-
-# App layer
-crun  = add_callout(s, "Cloud Run (Java APIs)\nRevisions • Traffic split", Inches(4.1), Inches(1.6), Inches(2.1), Inches(1.8), fill=PRIMARY)
-vpc   = add_callout(s, "Serverless VPC Access\nPrivate egress", Inches(6.4), Inches(1.6), Inches(2.1), Inches(0.8), fill=MUTED)
-cache = add_callout(s, "Optional: Memorystore (Redis)\nCaching / sessions", Inches(6.4), Inches(2.6), Inches(2.1), Inches(0.8), fill=MUTED)
-
-# Data layer
-alloy_primary = add_callout(s, "AlloyDB Primary\n(HA)", Inches(8.9), Inches(1.3), Inches(3.0), Inches(1.1), fill=ACCENT1)
-alloy_read    = add_callout(s, "AlloyDB Read Pool\nLow-latency reads", Inches(8.9), Inches(2.6), Inches(3.0), Inches(1.1), fill=ACCENT1)
-secret        = add_callout(s, "Secret Manager\nCredentials, rotations", Inches(8.9), Inches(3.9), Inches(3.0), Inches(0.8), fill=ACCENT2)
-
-# Observability / Security
-obs = add_callout(s, "Cloud Logging • Cloud Monitoring • Trace\nError reporting & SLO dashboards", Inches(0.5), Inches(5.9), Inches(11.4), Inches(0.9), fill=MUTED)
-
-# Connectors
-def connect(frm, to):
-    x1 = frm.left + frm.width
-    y1 = frm.top + frm.height/2
-    x2 = to.left
-    y2 = to.top + to.height/2
-    c = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x1, y1, x2, y2)
-    c.line.color.rgb = DARK
-    c.line.width = Pt(1.75)
-    c.line.dash_style = MSO_LINE.SOLID
-
-connect(cust, apigw)
-connect(apigw, armor)
-connect(armor, crun)
-connect(crun, vpc)
-connect(vpc, alloy_primary)
-connect(crun, cache)
-connect(crun, alloy_read)
-connect(crun, secret)
-
-add_note(s, "Simple, readable diagram: edge security, serverless app, private data access, observability.")
-
-# ----- Slide 6: Request Lifecycle -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Request Lifecycle (Happy Path)",
-    [
-        "1) Client → API Gateway/Load Balancer (TLS, WAF checks)",
-        "2) Routed to Cloud Run (Java API) revision based on traffic split",
-        "3) App authenticates (service account / ID token) & validates request",
-        "4) Private egress via Serverless VPC Access → AlloyDB (primary/read pool)",
-        "5) Read/write with prepared statements; optional Redis cache for hot keys",
-        "6) Response returned; traces/metrics/logs exported for SLOs & alerts",
-    ],
-    "Step-by-step flow",
-)
-
-# ----- Slide 7: Performance & Autoscaling (chart) -----
-s = prs.slides.add_slide(title_and_content)
-s.shapes.title.text = "Performance & Autoscaling"
-style_title(s.shapes.title)
-add_header_bar(s, "10K TPM baseline • Burst protection")
-
-chart_data = CategoryChartData()
-chart_data.categories = ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00"]
-tpm = [3000, 4000, 6000, 8000, 12000, 11000, 7000, 5000, 4000]
-instances = [3, 4, 6, 8, 12, 11, 7, 5, 4]
-chart_data.add_series("Requests (TPM)", tpm)
-chart_data.add_series("Cloud Run Instances", instances)
-
-x, y, cx, cy = Inches(0.8), Inches(1.8), Inches(12.8), Inches(4.3)
-chart = s.shapes.add_chart(XL_CHART_TYPE.LINE, x, y, cx, cy, chart_data).chart
-chart.has_legend = True
-chart.category_axis.has_major_gridlines = True
-chart.value_axis.has_major_gridlines = False
-
-add_note(s, "Shows noon spike and autoscaling behavior; tune concurrency & min instances.")
-
-# ----- Slide 8: KPI Snapshot (table) -----
-s = prs.slides.add_slide(title_and_content)
-table = add_table(
-    s,
-    "KPI Snapshot (Target vs. Observed)",
-    ["Metric", "Target", "Observed (Pilot)", "Notes"],
-    [
-        ["Availability", "≥ 99.9%", "99.95%", "Multi-Zone + managed failover"],
-        ["Latency p95", "≤ 200 ms", "180–190 ms", "Cache for hot reads; VPC peering"],
-        ["Throughput", "10K TPM", "12K TPM burst", "Autoscaling with concurrency tuning"],
-        ["Error Rate", "≤ 0.1%", "0.05%", "Retries with jitter; idempotent design"],
-    ],
-    col_widths=[2.2, 2.0, 2.2, 6.2],
-    header_text="SLIs & SLOs"
-)
-add_note(s, "Replace with live data before presenting if available.")
-
-# ----- Slide 9: Security & Compliance -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Security & Compliance",
-    [
-        "IAM: service accounts with least privilege; per-service identities",
-        "WAF: Cloud Armor policies, rate limiting, bot defense",
-        "Encryption: TLS in transit; CMEK/PMK where required",
-        "Secret Manager: rotation & audit; no secrets in code",
-        "Network: Private IP to AlloyDB via Serverless VPC Access",
-        "Compliance readiness: audit logs, data residency, access reviews",
-    ],
-    "Security by design",
-)
-
-# ----- Slide 10: Reliability & HA -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Reliability & High Availability",
-    [
-        "Cloud Run: multi-instance across zones; min instances to warm critical APIs",
-        "AlloyDB: HA primary with automatic failover, read pools for scale",
-        "Idempotent APIs & safe retries for transient failures",
-        "Graceful degradation patterns and circuit breakers",
-        "Backups & point-in-time recovery (PITR) for database",
-    ],
-    "Keep customer journeys available",
-)
-
-# ----- Slide 11: Cost Model & Optimizations (table) -----
-s = prs.slides.add_slide(title_and_content)
-add_table(
-    s,
-    "Cost Model & Optimization Levers",
-    ["Component", "Cost Driver", "Optimization"],
-    [
-        ["Cloud Run", "vCPU/mem-seconds • requests", "Right-size containers; tune concurrency; min instances only for hot paths"],
-        ["AlloyDB", "Node hours • storage • IOPS", "Read pools for distribution; query tuning; connection pooling"],
-        ["Network", "Egress • LB", "VPC peering; keep traffic in-region; cache responses"],
-        ["Observability", "Logs • metrics • traces", "Set retention smartly; sample traces; structured logging"],
-    ],
-    col_widths=[3.0, 3.5, 6.1],
-    header_text="Efficient by default"
-)
-
-# ----- Slide 12: Deployment Pipeline -----
-s = prs.slides.add_slide(blank)
-add_header_bar(s, "CI/CD & Release Strategy")
-
-dev   = add_callout(s, "Dev Commit\n(Feature Branch)", Inches(0.6), Inches(1.3), Inches(2.3), Inches(1.0), fill=PRIMARY)
-ci    = add_callout(s, "CI: Build & Test\n(Jenkins / Cloud Build)", Inches(3.1), Inches(1.3), Inches(2.8), Inches(1.0), fill=ACCENT1)
-reg   = add_callout(s, "Artifact Registry\n(Immutable images)", Inches(6.2), Inches(1.3), Inches(2.8), Inches(1.0), fill=MUTED)
-cd    = add_callout(s, "CD: Deploy to Cloud Run\nRevisions + Rollout", Inches(9.3), Inches(1.3), Inches(3.0), Inches(1.0), fill=PRIMARY)
-
-def connect_mid(a, b):
-    c = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT,
-                               a.left + a.width, a.top + a.height/2,
-                               b.left, b.top + b.height/2)
-    c.line.color.rgb = DARK
-    c.line.width = Pt(1.75)
-
-connect_mid(dev, ci)
-connect_mid(ci, reg)
-connect_mid(reg, cd)
-
-# Canary/traffic split notes
-note = s.shapes.add_textbox(Inches(0.6), Inches(2.7), Inches(12.0), Inches(1.6))
-tf = note.text_frame
-tf.text = "Release Strategy"
-p = tf.paragraphs[0]
-p.runs[0].font.size = Pt(20)
-p.runs[0].font.bold = True
-p.runs[0].font.color.rgb = DARK
-p2 = tf.add_paragraph(); p2.text = "• 90/10 canary split → gradual rollout → full cutover on SLO pass"
-p3 = tf.add_paragraph(); p3.text = "• Instant rollback to previous revision if error budget burn > threshold"
-p4 = tf.add_paragraph(); p4.text = "• Infra as Code (Terraform) & policy-as-code (OPA) for consistent environments"
-
-# ----- Slide 13: Observability & Alerting -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Observability & Alerting",
-    [
-        "Dashboards: latency (p50/p95/p99), error rates, request volume, instance count",
-        "Tracing for critical user flows; RED/USE metrics",
-        "Proactive alerts on SLO burn rate; anomaly detection for traffic spikes",
-        "Structured logs with correlation IDs; centralized log-based metrics",
-    ],
-    "See issues before customers do",
-)
-
-# ----- Slide 14: Risks & Mitigations -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Risks & Mitigations",
-    [
-        "Sudden traffic spikes → autoscaling guardrails; pre-warm min instances for critical APIs",
-        "DB hot partitions → query/index tuning; sharding strategy; read pool usage",
-        "Secrets exposure risk → Secret Manager + KMS + no secrets in env vars",
-        "Cost overrun → budgets, alerts, rightsizing; per-route caching",
-        "Vendor-lock concerns → Postgres compatibility; portability of containers",
-    ],
-    "Plan for the edge cases",
-)
-
-# ----- Slide 15: Roadmap -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Roadmap (Next 1–3 Quarters)",
-    [
-        "Multi-region active/passive for DR (RTO/RPO targets)",
-        "Async patterns with Pub/Sub for bulk/long-running tasks",
-        "Advanced caching & read-through/write-behind where safe",
-        "Policy controls (Org restrictions, binary auth) & SBOM tracking",
-        "FinOps: per-service cost allocation & automated reports",
-    ],
-    "Iterate safely, ship faster",
-)
-
-# ----- Slide 16: Q&A -----
-s = prs.slides.add_slide(title_and_content)
-add_bullets(
-    s,
-    "Q&A",
-    [
-        "Thank you!",
-        "Contact: your.email@company.com",
-    ],
-    "Discussion"
-)
-
-# Save
-output = "Banking_API_on_GCP_Advanced.pptx"
-prs.save(output)
-print(f"✅ Created: {output}")
+Absolutely! Here’s a set of challenging Apache Spark interview questions with concise answers — covering core Spark, Spark SQL, DataFrames, RDDs, streaming, and optimization. These are evaluative and often asked in real interviews for Data Engineering roles.
+
+
+---
+
+1️⃣ Spark Basics
+
+Q1. Difference between RDD, DataFrame, and Dataset?
+A:
+
+RDD: Low-level, immutable distributed collection, strong typing, no optimizations.
+
+DataFrame: Distributed collection of rows with schema, optimized via Catalyst.
+
+Dataset: Strongly-typed, combines RDD type safety with DataFrame optimizations.
+
+
+Q2. Explain lazy evaluation in Spark.
+A: Spark builds a DAG of transformations but doesn’t execute until an action (e.g., count(), collect()) is called → optimizes execution and avoids unnecessary computations.
+
+Q3. What is the difference between transformations and actions?
+A:
+
+Transformations: Lazy operations that return new RDD/DataFrame (map, filter, select).
+
+Actions: Trigger execution and return results (count, collect, write).
+
+
+
+---
+
+2️⃣ Spark SQL / DataFrames
+
+Q4. Difference between join and broadcast join?
+A:
+
+Regular join: Shuffles large tables → expensive.
+
+Broadcast join: Small table broadcasted to all nodes → avoids shuffle → faster.
+
+
+Q5. How does Spark SQL optimize queries?
+A: Catalyst optimizer performs logical plan → optimized logical plan → physical plan → code generation, including predicate pushdown, column pruning, join reordering.
+
+Q6. Explain partitioning and its impact on performance.
+A:
+
+Partitioning distributes data across nodes.
+
+Proper partitioning reduces data shuffle, improves parallelism.
+
+Skewed partitions cause slow tasks.
+
+
+
+---
+
+3️⃣ Spark Internals
+
+Q7. What is a shuffle in Spark and why is it expensive?
+A:
+
+Shuffle = redistributing data across nodes (groupBy, join).
+
+Expensive → disk I/O, network transfer, serialization/deserialization, and task waits.
+
+
+Q8. Difference between narrow and wide transformations?
+A:
+
+Narrow: Each input partition → 1 output partition (map, filter) → no shuffle.
+
+Wide: Input partition → multiple output partitions (groupBy, join) → requires shuffle.
+
+
+Q9. Explain the DAG in Spark.
+A: Directed Acyclic Graph of stages/tasks representing transformations.
+
+DAG scheduler breaks jobs into stages, tasks execute in parallel.
+
+
+
+---
+
+4️⃣ Spark Streaming / Structured Streaming
+
+Q10. Difference between batch and streaming in Spark?
+A:
+
+Batch → process all data at once.
+
+Streaming → micro-batches (Structured Streaming) or continuous processing, low-latency.
+
+
+Q11. How do you handle late-arriving data in streaming?
+A:
+
+Use event-time watermarking and window operations to include late events within allowed lateness.
+
+
+Q12. Explain exactly-once semantics in Spark Structured Streaming.
+A:
+
+Achieved via idempotent writes + checkpointing → ensures each input is processed only once.
+
+
+
+---
+
+5️⃣ Performance & Optimization
+
+Q13. How do you handle skewed data in joins or aggregations?
+A:
+
+Use salting, broadcast join, or repartition on join key to distribute data evenly.
+
+
+Q14. Explain caching and persistence in Spark.
+A:
+
+cache() / persist() → store RDD/DataFrame in memory/disk to avoid recomputation.
+
+Choose storage level (MEMORY_ONLY, MEMORY_AND_DISK) based on dataset size and reuse.
+
+
+Q15. How does Spark manage memory for executors?
+A:
+
+JVM heap divided into:
+
+Execution memory → shuffle, joins, aggregations
+
+Storage memory → cached RDD/DataFrame
+
+
+Spill to disk if memory exceeds.
+
+
+
+---
+
+6️⃣ Advanced / Scenario Questions
+
+Q16. Difference between mapPartitions and map?
+A:
+
+mapPartitions: operates on entire partition → fewer function calls → more efficient.
+
+map: operates row by row → higher function call overhead.
+
+
+Q17. How to optimize Spark jobs on large datasets?
+A:
+
+Partition tuning (repartition, coalesce)
+
+Avoid wide transformations / minimize shuffle
+
+Use broadcast joins for small tables
+
+Cache intermediate results
+
+Enable whole-stage code generation
+
+
+Q18. Explain lineage in Spark RDDs.
+A:
+
+Lineage = record of all transformations used to build an RDD.
+
+Used for fault recovery: recompute lost partitions from parent RDDs.
+
+
+
+---
+
+If you want, I can create a second set of extremely hard Spark interview questions, including hands-on coding or scenario-based questions like “write a Spark job to deduplicate streaming events, partition by date, and store as Parquet with clustering,” which are often real evaluative tests in interviews.
+
+Do you want me to make that next?
+
+.
