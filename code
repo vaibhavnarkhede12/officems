@@ -3,6 +3,12 @@ Absolutely! Here’s a set of challenging Apache Spark interview questions with 
 
 ---
 
+
+[06/10, 02:01] Vaibhav Narkhede: What is shuffling 
+Groupbykey and combine bykey
+[06/10, 02:01] Vaibhav Narkhede: What are lambda functions and beam.map / beam.flatmap
+[06/10, 02:02] Vaibhav Narkhede: What is yeild and how is differs from return
+[06/10, 02:05] Vaibhav Narkhede: What happens if one of the element whole processing makes the process throw an exception
 1️⃣ Spark Basics
 
 Q1. Difference between RDD, DataFrame, and Dataset?
