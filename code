@@ -3,6 +3,25 @@ Absolutely! Here’s a set of challenging Apache Spark interview questions with 
 
 ---
 
+We are in banking and we send transaction messages
+
+So we get messages from source in json format in pubsub topic so we read messages through a dataflow rules pipeline and send it downstream to an api
+
+So the way is we get a stm excel sheet which has transformation source columns and output columns what transformation we need to do like regex drop the field or change the type
+
+Then we have a rules python code which onsisys of such functions like regex concat string to int or type transfer...
+
+So we read stm and the functions and write a json config file like
+{
+Type - concat
+Input column
+Output col
+}...
+And pass this as an input params to the dataflow
+
+Now I have already 20-25 such usecases , so now using ai I want to generate this json file automatically such that every time I pass something I get the json output as well as it train itself automatically so slowly it proves accurate outputs because obviously these stm and python functions are only for us and won't be same for other sin internet
+
+
 
 [06/10, 02:01] Vaibhav Narkhede: What is shuffling 
 Groupbykey and combine bykey
