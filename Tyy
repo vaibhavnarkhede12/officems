@@ -1,99 +1,188 @@
-# Use Ubuntu as the base image
-FROM ubuntu:latest
+# generate.py
+import os
+import json
+import argparse
+from pathlib import Path
+import pandas as pd
+import importlib.util
+import subprocess
 
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
+# ----- Config -----
+REPO_LLAMA_SUBPATH = "llama"   # inside the cloned repo
+LOCAL_STM_DIR = "configs"      # local folder with <name>.xlsx
+UTILS_PATH = "utils/utils.py"  # relative path to your utils file
+TRAINING_OUT = "training/pairs.jsonl"
 
-# Update packages and install necessary tools
-RUN apt-get update && apt-get install -y \
-    sudo \
-    && apt-get clean
+# ----- Helper: load utils module dynamically -----
+def load_utils(utils_path):
+    p = Path(utils_path)
+    if not p.exists():
+        raise FileNotFoundError(f"utils.py not found at {utils_path}")
+    spec = importlib.util.spec_from_file_location("utils", str(p))
+    utils = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(utils)
+    return utils
 
-# Create Tomcat logs directory
-RUN mkdir -p /var/log/tomcat
+# ----- Prediction layer (pluggable) -----
+def predict_rule(transformation_text, mode="local", vertex_endpoint=None):
+    """
+    Returns a dict like: {"type": "mask", "params":{"visible":4}} or None on fail.
+    mode: "vertex" or "local"
+    vertex_endpoint: dict with keys project, region, endpoint_id (if mode == "vertex")
+    """
+    if mode == "vertex":
+        # Vertex prediction (online). User must have gcloud auth set & google-cloud-aiplatform installed.
+        from google.cloud import aiplatform
+        aiplatform.init(project=vertex_endpoint["project"], location=vertex_endpoint["region"])
+        endpoint = aiplatform.Endpoint(vertex_endpoint["endpoint_id"])
+        # the input should match training 'input' format: we send the transformation text
+        resp = endpoint.predict(instances=[{"content": transformation_text}])
+        # We expect resp.predictions[0] to contain model output text (string)
+        out_text = resp.predictions[0] if resp.predictions else None
+        if out_text:
+            # try parse
+            try:
+                return json.loads(out_text)
+            except Exception:
+                return {"raw": out_text}
+        return None
 
-# Create symlinks for Tomcat files and logs
-RUN ln -s /opt/apache-tomcat /opt/tomcat && \
-    ln -s /var/log/tomcat /opt/tomcat/logs
+    # Local fallback: super simple heuristic + small keyword classifier
+    t = transformation_text.lower()
+    if "drop" in t or "remove" in t:
+        return {"type":"drop", "params":{}}
+    if "first" in t and ("char" in t or "characters" in t):
+        # find number
+        import re
+        m = re.search(r"first\s+(\d+)", t)
+        n = int(m.group(1)) if m else 10
+        return {"type":"substring", "params":{"length": n}}
+    if "decimal" in t or "round" in t:
+        import re
+        m = re.search(r"(\d+)\s*decimal", t)
+        n = int(m.group(1)) if m else 2
+        return {"type":"round_decimal", "params":{"places": n}}
+    if "concat" in t or "combine" in t:
+        return {"type":"concat", "params":{}}
+    if "mask" in t or "last 4" in t:
+        # mask except last 4
+        return {"type":"mask", "params":{"visible":4}}
+    # fallback: return raw text so human can later correct
+    return {"type":"unknown", "params":{"raw": transformation_text}}
 
-# Add a user "tomcat" with specific UID
-RUN useradd -m -u 700 tomcat
+# ----- Validate the predicted rule by calling utils -----
+def validate_rule_with_utils(pred_rule, utils, example_row):
+    """
+    Try to call a validation path in utils if possible.
+    example_row is a dict of the source example (one row)
+    Returns (valid:bool, details:str)
+    """
+    t = pred_rule.get("type")
+    try:
+        if t == "drop":
+            # no validation needed
+            return True, "drop"
+        if t == "substring":
+            fn = getattr(utils, "substring", None)
+            if not fn:
+                return False, "substring() not found in utils"
+            # call with a sample value
+            sample = example_row.get("Input column name", "")
+            # we won't run actual masking on data here — just check callable
+            return True, "ok"
+        if t == "round_decimal":
+            fn = getattr(utils, "round_decimal", None)
+            if not fn:
+                return False, "round_decimal() not found in utils"
+            return True, "ok"
+        if t == "mask":
+            fn = getattr(utils, "mask", None)
+            if not fn:
+                return False, "mask() not found in utils"
+            return True, "ok"
+        if t == "concat":
+            fn = getattr(utils, "concat", None)
+            if not fn:
+                return False, "concat() not found in utils"
+            return True, "ok"
+        if t == "unknown":
+            return False, "unknown type"
+        return True, "assumed ok"
+    except Exception as e:
+        return False, str(e)
 
-# Give the "tomcat" user ownership and permissions
-RUN chown -R tomcat:tomcat /opt/apache-tomcat && chmod -R 0775 /opt/apache-tomcat && \
-    chown -R tomcat:tomcat /var/log/tomcat && chmod -R 0775 /var/log/tomcat
+# ----- Main loop -----
+def process(repo_dir, local_stm_dir, mode="local", vertex_cfg=None, push=False):
+    repo_dir = Path(repo_dir)
+    llama_dir = repo_dir / REPO_LLAMA_SUBPATH
+    if not llama_dir.exists():
+        raise FileNotFoundError(f"Repo path missing or wrong: {llama_dir}")
 
-# Set the default user as tomcat
-USER tomcat
+    utils = load_utils(Path(UTILS_PATH))
+    local_stm_dir = Path(local_stm_dir)
+    # list json files in llama folder
+    json_files = list(llama_dir.glob("*.json"))
+    print(f"Found {len(json_files)} json files in {llama_dir}")
 
-# Default command
-CMD ["/bin/bash"]
+    # iterate json names and match xlsx
+    for jf in json_files:
+        name = jf.stem
+        xlsx_path = local_stm_dir / f"{name}.xlsx"
+        if not xlsx_path.exists():
+            print(f"Skipping {name}: no matching STM {xlsx_path}")
+            continue
+        print(f"Processing {name}: STM={xlsx_path} JSON={jf}")
+        df = pd.read_excel(xlsx_path)
+        # expect headers: Input column name, Input column type, Target column name, Target column type, Transformation
+        training_examples = []
+        generated_rules = []
+        for _, row in df.iterrows():
+            transform_text = str(row.get("Transformation","")).strip()
+            if not transform_text:
+                continue
+            pred = predict_rule(transform_text, mode=mode, vertex_endpoint=vertex_cfg)
+            valid, details = validate_rule_with_utils(pred, utils, row.to_dict())
+            generated_rules.append({"source": row.get("Input column name"),
+                                    "target": row.get("Target column name"),
+                                    "prediction": pred,
+                                    "valid": valid,
+                                    "details": details})
+            # write training pair for later offline tuning
+            training_examples.append({"input": transform_text, "output": json.dumps(pred, ensure_ascii=False)})
+        # write out the generated JSON config (simple structure — adapt as needed)
+        out_config = {"rules": generated_rules}
+        backup = jf.with_suffix(".json.bak")
+        if not backup.exists():
+            jf.replace(backup)  # keep backup of original
+            # write new JSON
+        with open(jf, "w", encoding="utf-8") as f:
+            json.dump(out_config, f, indent=2, ensure_ascii=False)
+        print(f"Wrote updated {jf}; examples generated: {len(training_examples)}")
+        # append training examples to training/pairs.jsonl
+        os.makedirs(Path(TRAINING_OUT).parent, exist_ok=True)
+        with open(TRAINING_OUT, "a", encoding="utf-8") as fout:
+            for ex in training_examples:
+                fout.write(json.dumps(ex, ensure_ascii=False) + "\n")
 
+    if push:
+        # commit & push changes (be careful!)
+        subprocess.check_call(["git", "-C", str(repo_dir), "add", str(repo_dir / REPO_LLAMA_SUBPATH)])
+        subprocess.check_call(["git", "-C", str(repo_dir), "commit", "-m", "Auto-generated JSON updates from generate.py"],)
+        subprocess.check_call(["git", "-C", str(repo_dir), "push"])
+        print("Pushed updates to origin")
 
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--repo", required=True, help="Local clone of repo")
+    p.add_argument("--stmdir", default=LOCAL_STM_DIR)
+    p.add_argument("--mode", default="local", choices=["local","vertex"])
+    p.add_argument("--vertex_project", default=None)
+    p.add_argument("--vertex_region", default=None)
+    p.add_argument("--vertex_endpoint_id", default=None)
+    p.add_argument("--push", action="store_true", help="Commit & push generated JSONs back to repo (use with care)")
+    args = p.parse_args()
 
-
-
-
-# Use Ubuntu as the base image
-FROM ubuntu:latest
-
-# Set environment variables and update system
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y \
-    curl \
-    vim \
-    && rm -rf /var/lib/apt/lists/*
-
-# Insert JAVA_HOME and JRE_HOME variables into .bashrc
-RUN echo 'export JAVA_HOME="/usr/java/jdk1.8.0_211-amd64/jre"' >> ~/.bashrc && \
-    echo 'export JRE_HOME="/usr/java/jdk1.8.0_211-amd64/jre"' >> ~/.bashrc
-
-# Insert SPRING_HOME variable and update PATH in .bashrc
-RUN echo 'export SPRING_HOME="/opt/springboot"' >> ~/.bashrc && \
-    echo 'export PATH=$SPRING_HOME/bin:$PATH' >> ~/.bashrc
-
-# Give permissions to Spring Boot binary
-RUN mkdir -p /opt/springboot/bin && \
-    chmod 550 /opt/springboot/bin/spring
-
-# Source .bashrc to apply environment variable changes
-RUN /bin/bash -c "source ~/.bashrc"
-
-# Default command to keep container running
-CMD [ "bash" ]
-
-
-
-
-  template:
-    metadata:
-      name: nginx
-      labels:
-        app: nginx
-    spec:
-      volumes:
-      - name: nginx-pvc
-        persistentVolumeClaim:
-          claimName: nginx-pvc
-      containers:
-      - name: nginx
-        image: registry.k8s.io/nginx-slim:0.8
-        ports:
-        - containerPort: 8080
-        volumeMounts:
-          - name: nginx-pvc
-            mountPath: /usr/share/nginx/html
-      
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: nginx-pvc
-spec:
-  storageClassName: standard
-  accessModes: 
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 100Mi
+    vertex_cfg = None
+    if args.mode == "vertex":
+        vertex_cfg = {"project": args.vertex_project, "region": args.vertex_region, "endpoint_id": args.vertex_endpoint_id}
+    process(args.repo, args.stmdir, mode=args.mode, vertex_cfg=vertex_cfg, push=args.push)
