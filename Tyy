@@ -1,82 +1,40 @@
-import pandas as pd
 import json
-import re
-from pathlib import Path
-import importlib.util
+import apache_beam as beam
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
+from datetime import datetime
 
-STM_FILE = "Nongm.xlsx"
-JSON_FILE = "Nongm.json"
-UTILS_FILE = "utils.py"
+class CreateMessages(beam.DoFn):
+    def process(self, element):
+        """Create 5 JSON messages each minute."""
+        now = datetime.utcnow().isoformat()
+        for i in range(5):
+            yield json.dumps({
+                "id": i,
+                "timestamp": now,
+                "message": f"Generated message {i}"
+            })
 
-def load_utils():
-    spec = importlib.util.spec_from_file_location("utils", UTILS_FILE)
-    utils = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(utils)
-    return utils
+def run():
+    project_id = "your-project-id"
+    topic_path = f"projects/{project_id}/topics/my-topic"
 
-def predict(transformation: str):
-    t = transformation.lower()
-    if "drop" in t or "remove" in t:
-        return {"type": "drop", "params": {}}
-    if "first" in t:
-        m = re.search(r"first\s+(\d+)", t)
-        if m:
-            return {"type": "substring", "params": {"length": int(m.group(1))}}
-    if "decimal" in t:
-        m = re.search(r"(\d+)\s*decimal", t)
-        if m:
-            return {"type": "round_decimal", "params": {"places": int(m.group(1))}}
-    if "mask" in t:
-        return {"type": "mask", "params": {"visible": 4}}
-    return {"type": "unknown", "params": {"raw": transformation}}
-
-def validate(rule, utils):
-    fn_type = rule["type"]
-    if fn_type == "drop":
-        return True
-    if fn_type == "substring":
-        return hasattr(utils, "substring") or hasattr(utils, "substr")
-    if fn_type == "round_decimal":
-        return hasattr(utils, "round_decimal") or hasattr(utils, "decimal_round")
-    if fn_type == "mask":
-        return hasattr(utils, "mask") or hasattr(utils, "mask_pan")
-    return False
-
-def main():
-    df = pd.read_excel(STM_FILE)
-    utils = load_utils()
-
-    new_rules = []
-
-    for idx, row in df.iterrows():
-        trans = str(row["Transformation"])
-        pred = predict(trans)
-        pred["valid"] = validate(pred, utils)
-
-        new_rules.append({
-            "row": int(idx),
-            "input": row["Input column name"],
-            "target": row["Target column name"],
-            "transformation": trans,
-            "rule": pred
-        })
-
-    with open(JSON_FILE, "r", encoding="utf-8") as f:
-        original_json = json.load(f)
-
-    # Backup
-    Path(JSON_FILE).with_suffix(".json.bak").write_text(
-        json.dumps(original_json, indent=2)
+    options = PipelineOptions(
+        streaming=True,
+        save_main_session=True
     )
+    options.view_as(StandardOptions).streaming = True
 
-    # Replace rules
-    original_json["rules"] = new_rules
-
-    with open(JSON_FILE, "w", encoding="utf-8") as f:
-        json.dump(original_json, f, indent=2)
-
-    print("✅ JSON updated successfully!")
-    print(f"Backup created: {JSON_FILE}.bak")
+    with beam.Pipeline(options=options) as p:
+        (
+            p
+            | "Generate every minute" >> beam.io.GenerateSequence(
+                start=0,
+                stop=None,
+                interval=60
+            )
+            | "Create 5 messages" >> beam.ParDo(CreateMessages())
+            | "Publish to Pub/Sub" >> beam.io.WriteToPubSub(topic_path)
+        )
 
 if __name__ == "__main__":
-    main()
+    run()
