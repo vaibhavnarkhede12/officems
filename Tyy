@@ -1,35 +1,25 @@
-from google.cloud import monitoring_v3
+from prophet import Prophet
 import pandas as pd
-import datetime
+from google.cloud import storage, bigquery
+import pickle
 
-client = monitoring_v3.MetricServiceClient()
-project_name = "projects/YOUR_PROJECT_ID"
+PROJECT_ID = "YOUR_PROJECT_ID"
+BUCKET_NAME = "cpu-forecast-models"
+BQ_TABLE = "YOUR_DATASET.cpu_history"
 
-now = datetime.datetime.utcnow()
-past = now - datetime.timedelta(days=14)
+bq = bigquery.Client(project=PROJECT_ID)
+query = f"SELECT time AS ds, value AS y FROM `{BQ_TABLE}` ORDER BY ds"
+df = bq.query(query).to_dataframe()
 
-interval = monitoring_v3.TimeInterval(
-    end_time={"seconds": int(now.timestamp())},
-    start_time={"seconds": int(past.timestamp())},
-)
+df['ds'] = pd.to_datetime(df['ds'])
+df['y'] = df['y'].astype(float)
 
-query = 'metric.type="compute.googleapis.com/instance/cpu/utilization"'
-results = client.list_time_series(
-    request={
-        "name": project_name,
-        "filter": query,
-        "interval": interval,
-        "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
-    }
-)
+model = Prophet(interval_width=0.95)
+model.fit(df[['ds', 'y']])
 
-rows = []
-for result in results:
-    for point in result.points:
-        ts = point.interval.end_time.timestamp()
-        value = point.value.double_value
-        rows.append({"timestamp": ts, "cpu": value})
+pickle.dump(model, open("cpu_model.pkl", "wb"))
 
-df = pd.DataFrame(rows).sort_values("timestamp")
-df.to_csv("cpu_history.csv", index=False)
-print(df.tail())
+storage.Client().bucket(BUCKET_NAME).blob("models/cpu_model.pkl")\
+    .upload_from_filename("cpu_model.pkl")
+
+print("✅ Model trained & uploaded successfully!")
