@@ -1,40 +1,35 @@
-import json
-import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
-from datetime import datetime
+from google.cloud import monitoring_v3
+import pandas as pd
+import datetime
 
-class CreateMessages(beam.DoFn):
-    def process(self, element):
-        """Create 5 JSON messages each minute."""
-        now = datetime.utcnow().isoformat()
-        for i in range(5):
-            yield json.dumps({
-                "id": i,
-                "timestamp": now,
-                "message": f"Generated message {i}"
-            })
+client = monitoring_v3.MetricServiceClient()
+project_name = "projects/YOUR_PROJECT_ID"
 
-def run():
-    project_id = "your-project-id"
-    topic_path = f"projects/{project_id}/topics/my-topic"
+now = datetime.datetime.utcnow()
+past = now - datetime.timedelta(days=14)
 
-    options = PipelineOptions(
-        streaming=True,
-        save_main_session=True
-    )
-    options.view_as(StandardOptions).streaming = True
+interval = monitoring_v3.TimeInterval(
+    end_time={"seconds": int(now.timestamp())},
+    start_time={"seconds": int(past.timestamp())},
+)
 
-    with beam.Pipeline(options=options) as p:
-        (
-            p
-            | "Generate every minute" >> beam.io.GenerateSequence(
-                start=0,
-                stop=None,
-                interval=60
-            )
-            | "Create 5 messages" >> beam.ParDo(CreateMessages())
-            | "Publish to Pub/Sub" >> beam.io.WriteToPubSub(topic_path)
-        )
+query = 'metric.type="compute.googleapis.com/instance/cpu/utilization"'
+results = client.list_time_series(
+    request={
+        "name": project_name,
+        "filter": query,
+        "interval": interval,
+        "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+    }
+)
 
-if __name__ == "__main__":
-    run()
+rows = []
+for result in results:
+    for point in result.points:
+        ts = point.interval.end_time.timestamp()
+        value = point.value.double_value
+        rows.append({"timestamp": ts, "cpu": value})
+
+df = pd.DataFrame(rows).sort_values("timestamp")
+df.to_csv("cpu_history.csv", index=False)
+print(df.tail())
