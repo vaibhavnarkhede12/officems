@@ -203,4 +203,35 @@ If you want, I can create a second set of extremely hard Spark interview questio
 
 Do you want me to make that next?
 
+
+region = "us-west2"
+instance_name = "psql-eu-west2-cl-dev"
+metric_type = "cloudsql.googleapis.com/database/cpu/utilization"
+
+metric_filter = (
+    'resource.type = "cloudsql_database" '
+    f'AND resource.label.database_id = "{project_id}:{region}:{instance_name}" '
+    f'AND metric.type = "{metric_type}"'
+)
+
+aggregation = monitoring_v3.Aggregation(
+    alignment_period={"seconds": 60},
+    per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_MAX
+)
+
+interval = monitoring_v3.TimeInterval(
+    end_time={"seconds": int(datetime.utcnow().timestamp())},
+    start_time={"seconds": int((datetime.utcnow() - timedelta(hours=24)).timestamp())}
+)
+
+results = client.list_time_series(
+    request={
+        "name": f"projects/{project_id}",
+        "filter": metric_filter,
+        "interval": interval,
+        "aggregation": aggregation,
+        "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+    }
+)
+
 .
