@@ -1,25 +1,59 @@
-from prophet import Prophet
-import pandas as pd
-from google.cloud import storage, bigquery
-import pickle
+from google.cloud import monitoring_v3
+from datetime import datetime, timedelta, timezone
 
-PROJECT_ID = "YOUR_PROJECT_ID"
-BUCKET_NAME = "cpu-forecast-models"
-BQ_TABLE = "YOUR_DATASET.cpu_history"
+def fetch_cloudsql_cpu_utilization(project_id, instance_id, region):
+    client = monitoring_v3.MetricServiceClient()
 
-bq = bigquery.Client(project=PROJECT_ID)
-query = f"SELECT time AS ds, value AS y FROM `{BQ_TABLE}` ORDER BY ds"
-df = bq.query(query).to_dataframe()
+    # Cloud SQL metric type for CPU utilization
+    metric_type = "cloudsql.googleapis.com/database/cpu/utilization"
 
-df['ds'] = pd.to_datetime(df['ds'])
-df['y'] = df['y'].astype(float)
+    # Resource filter
+    instance_filter = (
+        f'metric.type="{metric_type}" AND '
+        f'resource.label."region"="{region}" AND '
+        f'resource.label."database_id"="{project_id}:{instance_id}"'
+    )
 
-model = Prophet(interval_width=0.95)
-model.fit(df[['ds', 'y']])
+    # Time window: last 10 hours
+    now = datetime.now(timezone.utc)
+    interval = monitoring_v3.TimeInterval(
+        end_time=now,
+        start_time=now - timedelta(hours=10),
+    )
 
-pickle.dump(model, open("cpu_model.pkl", "wb"))
+    # 60 seconds alignment (one point per minute)
+    aggregation = monitoring_v3.Aggregation(
+        alignment_period={"seconds": 60},
+        per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_MEAN,
+    )
 
-storage.Client().bucket(BUCKET_NAME).blob("models/cpu_model.pkl")\
-    .upload_from_filename("cpu_model.pkl")
+    results = client.list_time_series(
+        request={
+            "name": f"projects/{project_id}",
+            "filter": instance_filter,
+            "interval": interval,
+            "aggregation": aggregation,
+            "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+        }
+    )
 
-print("✅ Model trained & uploaded successfully!")
+    print(f"\nCPU Utilization for {instance_id} (last 10 hours, per minute):\n")
+
+    found = False
+    for ts in results:
+        found = True
+        for point in ts.points:
+            timestamp = point.interval.end_time
+            value = point.value.double_value * 100  # convert fraction to %
+            print(f"{timestamp.ToJsonString()} -> {value:.2f}%")
+
+    if not found:
+        print("No data found. Check your instance ID, region, or permissions.")
+
+
+if __name__ == "__main__":
+    fetch_cloudsql_cpu_utilization(
+        project_id="YOUR_PROJECT_ID",
+        instance_id="YOUR_INSTANCE_ID",
+        region="YOUR_INSTANCE_REGION"  # e.g., us-central1
+    )
