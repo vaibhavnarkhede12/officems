@@ -14,6 +14,11 @@ def fetch_cloudsql_cpu_utilization(project_id, instance_id, region):
         f'resource.label."database_id"="{project_id}:{instance_id}"'
     )
 
+
+"pattern": r'(?<=:\d{2})(?=[+-]\d{2}:\d{2}$)',
+"replacement": ".000000"
+
+
     # Time window: last 10 hours
     now = datetime.now(timezone.utc)
     interval = monitoring_v3.TimeInterval(
