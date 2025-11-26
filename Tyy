@@ -1,64 +1,22 @@
-from google.cloud import monitoring_v3
-from datetime import datetime, timedelta, timezone
+server {
+    listen 80;
+    server_name _;
 
-def fetch_cloudsql_cpu_utilization(project_id, instance_id, region):
-    client = monitoring_v3.MetricServiceClient()
+    # Redirect all HTTP to HTTPS
+    return 301 https://$host$request_uri;
+}
 
-    # Cloud SQL metric type for CPU utilization
-    metric_type = "cloudsql.googleapis.com/database/cpu/utilization"
+server {
+    listen 443 ssl;
+    server_name _;
 
-    # Resource filter
-    instance_filter = (
-        f'metric.type="{metric_type}" AND '
-        f'resource.label."region"="{region}" AND '
-        f'resource.label."database_id"="{project_id}:{instance_id}"'
-    )
+    ssl_certificate /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
 
+    root /usr/share/nginx/html;
+    index index.html;
 
-"pattern": r'(?<=:\d{2})(?=[+-]\d{2}:\d{2}$)',
-"replacement": ".000000"
-
-
-    # Time window: last 10 hours
-    now = datetime.now(timezone.utc)
-    interval = monitoring_v3.TimeInterval(
-        end_time=now,
-        start_time=now - timedelta(hours=10),
-    )
-
-    # 60 seconds alignment (one point per minute)
-    aggregation = monitoring_v3.Aggregation(
-        alignment_period={"seconds": 60},
-        per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_MEAN,
-    )
-
-    results = client.list_time_series(
-        request={
-            "name": f"projects/{project_id}",
-            "filter": instance_filter,
-            "interval": interval,
-            "aggregation": aggregation,
-            "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
-        }
-    )
-
-    print(f"\nCPU Utilization for {instance_id} (last 10 hours, per minute):\n")
-
-    found = False
-    for ts in results:
-        found = True
-        for point in ts.points:
-            timestamp = point.interval.end_time
-            value = point.value.double_value * 100  # convert fraction to %
-            print(f"{timestamp.ToJsonString()} -> {value:.2f}%")
-
-    if not found:
-        print("No data found. Check your instance ID, region, or permissions.")
-
-
-if __name__ == "__main__":
-    fetch_cloudsql_cpu_utilization(
-        project_id="YOUR_PROJECT_ID",
-        instance_id="YOUR_INSTANCE_ID",
-        region="YOUR_INSTANCE_REGION"  # e.g., us-central1
-    )
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
