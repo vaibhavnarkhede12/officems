@@ -37,6 +37,26 @@ app.listen(port, () => {
 });
 
 
+[Unit]
+Description=ESP Node Application
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/espapp
+ExecStart=/usr/bin/npm run dev
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+# If npm is not found, set PATH manually:
+# Environment="PATH=/usr/bin:/usr/local/bin"
+
+[Install]
+WantedBy=multi-user.target
+
+
+
 
 
 server {
