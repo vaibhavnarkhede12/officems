@@ -1,14 +1,28 @@
-CREATE OR REPLACE MODEL `proj.monitoring.memory_sarima`
+CREATE OR REPLACE MODEL `proj.monitoring.cpu_sarima_minute`
 OPTIONS (
   model_type = 'ARIMA_PLUS',
   time_series_timestamp_col = 'ts',
   time_series_data_col = 'value',
-  time_series_id_col = 'instance_id',
-  auto_arima = TRUE,
-  data_frequency = 'AUTO_FREQUENCY'
+  time_series_id_col = 'series_id',
+  data_frequency = 'AUTO_FREQUENCY',
+  auto_arima = TRUE
 ) AS
 SELECT
   ts,
   value,
-  instance_id
-FROM `proj.monitoring.cloudsql_memory`;
+  series_id
+FROM `proj.monitoring.gce_cpu_minute`;
+
+
+SELECT
+  series_id,
+  forecast_timestamp,
+  forecast_value,
+  prediction_interval_lower,
+  prediction_interval_upper
+FROM ML.FORECAST(
+  MODEL `proj.monitoring.cpu_sarima_minute`,
+  STRUCT(120 AS horizon, 0.9 AS confidence_level)
+);
+
+
