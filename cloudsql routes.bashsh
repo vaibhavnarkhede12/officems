@@ -1,39 +1,162 @@
-sleep 120
-MULTINIC_INSTANCE_NIC1_IP=$(ip a show ens5 | grep inet | awk '{ print $2 }' | cut -d'/' -f 1)
-STANDALONE_SUBNET_GATEWAY=192.168.16.1
-CLOUDSQL_SUBNET_GATEWAY=192.168.197.1
-CLOUDSQL_SUBNET_CIDR=192.168.197.0/24
+from google.cloud import monitoring_v3, bigquery, storage
+from datetime import datetime, timedelta, timezone
+import pandas as pd
+import itertools, time, pickle
 
-#this command will configure ens5 with the nic2 ip address just to avoid any confusion and mask it with 255... so that is communicates only within its networks unless any route is explicity provided and broacast means it only broadcasts to itself and it is not necessary and can be removed
-sudo ifconfig ens5 $MULTINIC_INSTANCE_NIC1_IP netmask 255.255.255.255 broadcast $MULTINIC_INSTANCE_NIC1_IP mtu 1430
+# =============================================================================
+# BigQuery helpers
+# =============================================================================
 
-# create a rotuing table with number 1 and name rt1 
-echo "1 rt1" | sudo tee -a /etc/iproute2/rt_tables
+def ensure_bq_table(bq_project_id: str, dataset_id: str, table_name: str):
+    client = bigquery.Client(project=bq_project_id)
+    dataset_ref = f"{bq_project_id}.{dataset_id}"
+    table_ref = f"{bq_project_id}.{dataset_id}.{table_name}"
 
-#add a route , this ensures that any pcket that is going to use 192.168.16.1 will get out through ens5 and its ip address specifically . 
-sudo ip route add $STANDALONE_SUBNET_GATEWAY src $MULTINIC_INSTANCE_NIC1_IP dev ens5 table rt1
+    try:
+        client.get_dataset(dataset_ref)
+    except Exception:
+        client.create_dataset(bigquery.Dataset(dataset_ref))
 
-# all traffic from ens5 whose route cant be found is routed via the 192.168.16.1 gateway , hence the above command is good to have but not necessary again
-sudo ip route add default via $STANDALONE_SUBNET_GATEWAY dev ens5 table rt1
+    try:
+        client.get_table(table_ref)
+    except Exception:
+        schema = [
+            bigquery.SchemaField("ds", "TIMESTAMP"),
+            bigquery.SchemaField("y", "INT64"),
+        ]
+        table = bigquery.Table(table_ref, schema=schema)
+        table.time_partitioning = bigquery.TimePartitioning(field="ds")
+        client.create_table(table)
 
-# Adds a rule to route traffic originating from $MULTINIC_INSTANCE_NIC1_IP through the rt1 table.
-sudo ip rule add from $MULTINIC_INSTANCE_NIC1_IP/32 table rt1
+# =============================================================================
+# Metric fetch
+# =============================================================================
 
-#adds a policy-based routing rule for outbound traffic destined to $MULTINIC_INSTANCE_NIC1_IP. This rule ensures that any traffic intended for $MULTINIC_INSTANCE_NIC1_IP will be routed using the rt1 routing table.
-sudo ip rule add to $MULTINIC_INSTANCE_NIC1_IP/32 table rt1
+def fetch_pubsub_topic_send_count(
+    metric_project_id: str,
+    topic_id: str,
+    metric_type: str,
+    bq_project_id: str,
+    dataset_id: str,
+    table_name: str,
+    lookback_hours: int
+):
+    metric_client = monitoring_v3.MetricServiceClient()
 
-# This command ensures that any traffic destined for IP addresses within the $CLOUDSQL_SUBNET_CIDR range will use the ens5 interface.
-sudo ip route add $CLOUDSQL_SUBNET_GATEWAY src $MULTINIC_INSTANCE_NIC1_IP dev ens5 table rt1
+    now = datetime.now(timezone.utc)
+    interval = monitoring_v3.TimeInterval(
+        end_time=now,
+        start_time=now - timedelta(hours=lookback_hours),
+    )
 
-# This command ensures that any traffic destined for IP addresses within the $CLOUDSQL_SUBNET_CIDR range will use the ens5 interface.
-sudo ip route add $CLOUDSQL_SUBNET_CIDR dev ens5
+    aggregation = monitoring_v3.Aggregation(
+        alignment_period={"seconds": 60},  # ✅ FORCE 1 MIN
+        per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_SUM,
+    )
 
+    metric_filter = (
+        f'metric.type="{metric_type}" AND '
+        f'resource.type="pubsub_topic" AND '
+        f'resource.labels.topic_id="{topic_id}"'
+    )
 
+    results = metric_client.list_time_series(
+        request={
+            "name": f"projects/{metric_project_id}",
+            "filter": metric_filter,
+            "interval": interval,
+            "aggregation": aggregation,
+        }
+    )
 
+    rows = []
+    for ts in results:
+        for p in ts.points:
+            raw = p.interval.end_time
+            ds = datetime(
+                raw.year, raw.month, raw.day,
+                raw.hour, raw.minute, 0, tzinfo=timezone.utc
+            )
+            y = p.value.int64_value or int(p.value.double_value)
+            rows.append({"ds": ds, "y": y})
 
+    if not rows:
+        print("No metric data.")
+        return None
 
+    df = pd.DataFrame(rows)
+    df = df.groupby("ds", as_index=False)["y"].sum()  # safety
 
+    ensure_bq_table(bq_project_id, dataset_id, table_name)
 
+    bq = bigquery.Client(project=bq_project_id)
+    bq.load_table_from_dataframe(
+        df,
+        f"{bq_project_id}.{dataset_id}.{table_name}",
+        job_config=bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE"),
+    ).result()
 
+    return df
 
+# =============================================================================
+# SARIMAX training
+# =============================================================================
 
+def train_sarimax_from_bq_and_store(
+    bq_project_id: str,
+    dataset_id: str,
+    table_name: str,
+    max_models: int,
+    max_seconds: int,
+    storage_project_id: str
+):
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+    MODEL_BUCKET = "trmc-12462064-observehub-dev-smart-analytics"
+
+    bq = bigquery.Client(project=bq_project_id)
+    df = bq.query(
+        f"SELECT ds, y FROM `{bq_project_id}.{dataset_id}.{table_name}` ORDER BY ds"
+    ).to_dataframe()
+
+    df["ds"] = pd.to_datetime(df["ds"], utc=True)
+    df = df.set_index("ds").asfreq("min")  # ✅ CRITICAL
+    s = df["y"].astype(float)
+
+    best_aic = float("inf")
+    best_res = None
+
+    start = time.time()
+    attempts = 0
+
+    for p, d, q in itertools.product([0,1,2], [0,1], [0,1,2]):
+        if attempts >= max_models or time.time() - start > max_seconds:
+            break
+        try:
+            res = SARIMAX(
+                s,
+                order=(p,d,q),
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            ).fit(disp=False)
+            attempts += 1
+
+            if res.aic < best_aic:
+                best_aic = res.aic
+                best_res = res
+        except Exception:
+            attempts += 1
+
+    if best_res is None:
+        print("No model fit.")
+        return
+
+    local_path = f"{table_name}.pkl"
+    best_res.save(local_path)  # ✅ NOT PICKLE
+
+    storage.Client(storage_project_id)\
+        .bucket(MODEL_BUCKET)\
+        .blob(local_path)\
+        .upload_from_filename(local_path)
+
+    print(f"Model stored: AIC={best_aic:.2f}")
