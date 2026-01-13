@@ -1,237 +1,289 @@
-Absolutely! Here’s a set of challenging Apache Spark interview questions with concise answers — covering core Spark, Spark SQL, DataFrames, RDDs, streaming, and optimization. These are evaluative and often asked in real interviews for Data Engineering roles.
-
-
----
-
-We are in banking and we send transaction messages
-
-So we get messages from source in json format in pubsub topic so we read messages through a dataflow rules pipeline and send it downstream to an api
-
-So the way is we get a stm excel sheet which has transformation source columns and output columns what transformation we need to do like regex drop the field or change the type
-
-Then we have a rules python code which onsisys of such functions like regex concat string to int or type transfer...
-
-So we read stm and the functions and write a json config file like
-{
-Type - concat
-Input column
-Output col
-}...
-And pass this as an input params to the dataflow
-
-Now I have already 20-25 such usecases , so now using ai I want to generate this json file automatically such that every time I pass something I get the json output as well as it train itself automatically so slowly it proves accurate outputs because obviously these stm and python functions are only for us and won't be same for other sin internet
-
-
-
-[06/10, 02:01] Vaibhav Narkhede: What is shuffling 
-Groupbykey and combine bykey
-[06/10, 02:01] Vaibhav Narkhede: What are lambda functions and beam.map / beam.flatmap
-[06/10, 02:02] Vaibhav Narkhede: What is yeild and how is differs from return
-[06/10, 02:05] Vaibhav Narkhede: What happens if one of the element whole processing makes the process throw an exception
-1️⃣ Spark Basics
-
-Q1. Difference between RDD, DataFrame, and Dataset?
-A:
-
-RDD: Low-level, immutable distributed collection, strong typing, no optimizations.
-
-DataFrame: Distributed collection of rows with schema, optimized via Catalyst.
-
-Dataset: Strongly-typed, combines RDD type safety with DataFrame optimizations.
-
-
-Q2. Explain lazy evaluation in Spark.
-A: Spark builds a DAG of transformations but doesn’t execute until an action (e.g., count(), collect()) is called → optimizes execution and avoids unnecessary computations.
-
-Q3. What is the difference between transformations and actions?
-A:
-
-Transformations: Lazy operations that return new RDD/DataFrame (map, filter, select).
-
-Actions: Trigger execution and return results (count, collect, write).
-
-
-
----
-
-2️⃣ Spark SQL / DataFrames
-
-Q4. Difference between join and broadcast join?
-A:
-
-Regular join: Shuffles large tables → expensive.
-
-Broadcast join: Small table broadcasted to all nodes → avoids shuffle → faster.
-
-
-Q5. How does Spark SQL optimize queries?
-A: Catalyst optimizer performs logical plan → optimized logical plan → physical plan → code generation, including predicate pushdown, column pruning, join reordering.
-
-Q6. Explain partitioning and its impact on performance.
-A:
-
-Partitioning distributes data across nodes.
-
-Proper partitioning reduces data shuffle, improves parallelism.
-
-Skewed partitions cause slow tasks.
-
-
-
----
-
-3️⃣ Spark Internals
-
-Q7. What is a shuffle in Spark and why is it expensive?
-A:
-
-Shuffle = redistributing data across nodes (groupBy, join).
-
-Expensive → disk I/O, network transfer, serialization/deserialization, and task waits.
-
-
-Q8. Difference between narrow and wide transformations?
-A:
-
-Narrow: Each input partition → 1 output partition (map, filter) → no shuffle.
-
-Wide: Input partition → multiple output partitions (groupBy, join) → requires shuffle.
-
-
-Q9. Explain the DAG in Spark.
-A: Directed Acyclic Graph of stages/tasks representing transformations.
-
-DAG scheduler breaks jobs into stages, tasks execute in parallel.
-
-
-
----
-
-4️⃣ Spark Streaming / Structured Streaming
-
-Q10. Difference between batch and streaming in Spark?
-A:
-
-Batch → process all data at once.
-
-Streaming → micro-batches (Structured Streaming) or continuous processing, low-latency.
-
-
-Q11. How do you handle late-arriving data in streaming?
-A:
-
-Use event-time watermarking and window operations to include late events within allowed lateness.
-
-
-Q12. Explain exactly-once semantics in Spark Structured Streaming.
-A:
-
-Achieved via idempotent writes + checkpointing → ensures each input is processed only once.
-
-
-
----
-
-5️⃣ Performance & Optimization
-
-Q13. How do you handle skewed data in joins or aggregations?
-A:
-
-Use salting, broadcast join, or repartition on join key to distribute data evenly.
-
-
-Q14. Explain caching and persistence in Spark.
-A:
-
-cache() / persist() → store RDD/DataFrame in memory/disk to avoid recomputation.
-
-Choose storage level (MEMORY_ONLY, MEMORY_AND_DISK) based on dataset size and reuse.
-
-
-Q15. How does Spark manage memory for executors?
-A:
-
-JVM heap divided into:
-
-Execution memory → shuffle, joins, aggregations
-
-Storage memory → cached RDD/DataFrame
-
-
-Spill to disk if memory exceeds.
-
-
-
----
-
-6️⃣ Advanced / Scenario Questions
-
-Q16. Difference between mapPartitions and map?
-A:
-
-mapPartitions: operates on entire partition → fewer function calls → more efficient.
-
-map: operates row by row → higher function call overhead.
-
-
-Q17. How to optimize Spark jobs on large datasets?
-A:
-
-Partition tuning (repartition, coalesce)
-
-Avoid wide transformations / minimize shuffle
-
-Use broadcast joins for small tables
-
-Cache intermediate results
-
-Enable whole-stage code generation
-
-
-Q18. Explain lineage in Spark RDDs.
-A:
-
-Lineage = record of all transformations used to build an RDD.
-
-Used for fault recovery: recompute lost partitions from parent RDDs.
-
-
-
----
-
-If you want, I can create a second set of extremely hard Spark interview questions, including hands-on coding or scenario-based questions like “write a Spark job to deduplicate streaming events, partition by date, and store as Parquet with clustering,” which are often real evaluative tests in interviews.
-
-Do you want me to make that next?
-
-
-region = "us-west2"
-instance_name = "psql-eu-west2-cl-dev"
-metric_type = "cloudsql.googleapis.com/database/cpu/utilization"
-
-metric_filter = (
-    'resource.type = "cloudsql_database" '
-    f'AND resource.label.database_id = "{project_id}:{region}:{instance_name}" '
-    f'AND metric.type = "{metric_type}"'
-)
-
-aggregation = monitoring_v3.Aggregation(
-    alignment_period={"seconds": 60},
-    per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_MAX
-)
-
-interval = monitoring_v3.TimeInterval(
-    end_time={"seconds": int(datetime.utcnow().timestamp())},
-    start_time={"seconds": int((datetime.utcnow() - timedelta(hours=24)).timestamp())}
-)
-
-results = client.list_time_series(
-    request={
-        "name": f"projects/{project_id}",
-        "filter": metric_filter,
-        "interval": interval,
-        "aggregation": aggregation,
-        "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
-    }
-)
-
-.
+from google.cloud import bigquery, storage
+import pandas as pd
+import pickle
+from datetime import datetime, timezone
+
+from statsmodels.tsa.statespace.sarimax import SARIMAX  # required for unpickle
+from statsmodels.tsa.statespace.sarimax import SARIMAXResults
+
+try:
+    # Some versions expose ResultsWrapper
+    from statsmodels.tsa.statespace.sarimax import SARIMAXResultsWrapper
+except Exception:
+    SARIMAXResultsWrapper = tuple()
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+# Hardcoded GCS bucket containing models (blob name == <table_name>.pkl)
+MODEL_BUCKET_NAME = "trmc-12462064-observehub-dev-smart-analytics"
+
+# ============================================================================
+# BigQuery helpers
+# ============================================================================
+
+def ensure_bq_table_exists(bq_project_id: str, dataset_id: str, table_name: str) -> bool:
+    """
+    Ensure forecast table exists. Do not create dataset.
+    - If dataset missing: print and return False.
+    - If table missing: create it and return True.
+    """
+    client = bigquery.Client(project=bq_project_id)
+    dataset_ref = f"{bq_project_id}.{dataset_id}"
+    table_ref = f"{bq_project_id}.{dataset_id}.{table_name}"
+
+    # Check dataset
+    try:
+        client.get_dataset(dataset_ref)
+    except Exception:
+        print(f"BigQuery dataset not present: {dataset_ref}")
+        return False
+
+    # Ensure table
+    try:
+        client.get_table(table_ref)
+        return True
+    except Exception:
+        try:
+            schema = [
+                bigquery.SchemaField("ds", "TIMESTAMP"),
+                bigquery.SchemaField("y", "INT64"),
+            ]
+            tbl = bigquery.Table(table_ref, schema=schema)
+            tbl.time_partitioning = bigquery.TimePartitioning(field="ds")
+            client.create_table(tbl)
+            print(f"Created BigQuery table: {table_ref}")
+            return True
+        except Exception as e:
+            print(f"Failed to create table {table_ref}: {e}")
+            return False
+
+# ============================================================================
+# GCS model loading
+# ============================================================================
+
+def load_model_from_gcs(project_id: str, bucket_name: str, blob_name: str):
+    client = storage.Client(project=project_id)
+    bucket = client.lookup_bucket(bucket_name)
+    if bucket is None:
+        print(f"GCS bucket '{bucket_name}' not found.")
+        return None
+
+    blob = bucket.blob(blob_name)
+    if not blob.exists():
+        print(f"GCS blob '{blob_name}' not found in bucket '{bucket_name}'.")
+        return None
+
+    try:
+        return pickle.loads(blob.download_as_bytes())
+    except Exception as e:
+        print(f"Failed to unpickle model: {e}")
+        return None
+
+# ============================================================================
+# Forecast logic
+# ============================================================================
+
+def forecast_window_and_store(
+    metric_project_id: str,
+    resource_type: str,
+    topic_id: str,
+    metric_type: str,  # unused; kept for tuple compatibility
+    dataset_id: str,
+    bq_project_id: str,
+    start_offset_minutes: int,
+    end_offset_minutes: int,
+):
+    # ------------------------------------------------------------------------
+    # Derive names
+    # ------------------------------------------------------------------------
+    safe_metric_project = metric_project_id.replace("-", "_")
+    safe_topic = topic_id.replace("-", "_")
+
+    table_name = (
+        f"{safe_metric_project}_{resource_type}_"
+        f"{safe_topic}_send_message_operation_count"
+    )
+    forecast_table = f"{table_name}_forecast"
+
+    # ------------------------------------------------------------------------
+    # Load trained model from GCS
+    # ------------------------------------------------------------------------
+    model_blob = f"{table_name}.pkl"
+    model_res = load_model_from_gcs(
+        bq_project_id,
+        MODEL_BUCKET_NAME,
+        model_blob,
+    )
+    if model_res is None:
+        return
+
+    if not isinstance(model_res, (SARIMAXResults, SARIMAXResultsWrapper)):
+        print("Loaded object is not SARIMAXResults/SARIMAXResultsWrapper.")
+        return
+
+    # ------------------------------------------------------------------------
+    # Build UTC window using offsets from now (minute aligned)
+    # ------------------------------------------------------------------------
+    now_utc = pd.Timestamp.now(tz="UTC").floor("min")
+    window_start = now_utc + pd.Timedelta(minutes=start_offset_minutes)
+    window_end = now_utc + pd.Timedelta(minutes=end_offset_minutes)  # exclusive
+
+    if window_end <= window_start:
+        print("Invalid window. Ensure end_offset_minutes > start_offset_minutes.")
+        return
+
+    periods = int((window_end - window_start).total_seconds() // 60)
+
+    # ------------------------------------------------------------------------
+    # Determine model's last observed timestamp (UTC)
+    # ------------------------------------------------------------------------
+    try:
+        idx = getattr(model_res.model, "_index", None) or model_res.data.row_labels
+        dt_idx = pd.DatetimeIndex(idx)
+        last_ts = dt_idx[-1]
+        last_ts = (
+            last_ts.tz_localize("UTC")
+            if last_ts.tzinfo is None
+            else last_ts.tz_convert("UTC")
+        )
+    except Exception:
+        # Fallback: try dates from the results if index missing
+        try:
+            dates = (
+                getattr(model_res, "dates", None)
+                or getattr(model_res.model.data, "dates", None)
+            )
+            dt_idx = pd.DatetimeIndex(pd.to_datetime(dates))
+            last_ts = dt_idx[-1]
+            last_ts = (
+                last_ts.tz_localize("UTC")
+                if last_ts.tzinfo is None
+                else last_ts.tz_convert("UTC")
+            )
+        except Exception:
+            print("Could not determine model's last timestamp.")
+            return
+
+    # ------------------------------------------------------------------------
+    # Build prediction: forecast from last_ts to window_end
+    # ------------------------------------------------------------------------
+    try:
+        steps = int((window_end - last_ts).total_seconds() // 60)
+        if steps <= 0:
+            print("Window lies entirely before model history; nothing to forecast.")
+            return
+
+        fc = model_res.get_forecast(steps=steps)
+        y_oos = pd.Series(fc.predicted_mean)
+
+        # Ensure datetime index starting last_ts + 1 minute
+        if not isinstance(y_oos.index, pd.DatetimeIndex):
+            y_oos.index = pd.date_range(
+                start=last_ts + pd.Timedelta(minutes=1),
+                periods=steps,
+                freq="min",
+                tz="UTC",
+            )
+
+        # Slice the requested window
+        yhat = y_oos.loc[window_start : window_end - pd.Timedelta(minutes=1)]
+        future_index = pd.date_range(
+            window_start, periods=periods, freq="min", tz="UTC"
+        )
+
+        # Retry with expanded forecast if empty
+        if yhat.empty:
+            print("Warning: yhat is empty after slicing. Expanding forecast range.")
+            extra_steps = steps + 60
+            fc2 = model_res.get_forecast(steps=extra_steps)
+            y2 = pd.Series(fc2.predicted_mean)
+            if not isinstance(y2.index, pd.DatetimeIndex):
+                y2.index = pd.date_range(
+                    start=last_ts + pd.Timedelta(minutes=1),
+                    periods=extra_steps,
+                    freq="min",
+                    tz="UTC",
+                )
+            yhat = y2.loc[window_start : window_end - pd.Timedelta(minutes=1)]
+
+        # Reindex and clean
+        preds = pd.DataFrame(
+            {
+                "ds": future_index,
+                "y": yhat.reindex(future_index),
+            }
+        )
+        preds["y"] = preds["y"].ffill().bfill()
+        preds["y"] = pd.to_numeric(preds["y"], errors="coerce")
+        preds["y"] = (
+            preds["y"]
+            .replace([float("inf"), float("-inf")], float("nan"))
+            .fillna(0.0)
+        )
+
+    except Exception as e:
+        print(f"Forecast failed: {e}")
+        return
+
+    # ------------------------------------------------------------------------
+    # Write to BigQuery forecast table
+    # ------------------------------------------------------------------------
+    if not ensure_bq_table_exists(bq_project_id, dataset_id, forecast_table):
+        return
+
+    bq_client = bigquery.Client(project=bq_project_id)
+    table_ref = f"{bq_project_id}.{dataset_id}.{forecast_table}"
+
+    # JSON rows cannot contain NaN/Inf
+    rows = [
+        {
+            "ds": ts.to_pydatetime().isoformat(),
+            "y": float(val),
+        }
+        for ts, val in zip(preds["ds"], preds["y"])
+    ]
+
+    job = bq_client.load_table_from_json(
+        rows,
+        table_ref,
+        job_config=bigquery.LoadJobConfig(
+            schema=[
+                bigquery.SchemaField("ds", "TIMESTAMP"),
+                bigquery.SchemaField("y", "FLOAT"),
+            ],
+            write_disposition="WRITE_TRUNCATE",
+        ),
+    )
+    job.result()
+
+    print(
+        f"Wrote {len(rows)} forecast rows to {table_ref} "
+        f"for window {window_start.isoformat()} to {window_end.isoformat()}"
+    )
+
+# ============================================================================
+# Main
+# ============================================================================
+
+if __name__ == "__main__":
+    # targets:
+    # (metric_project_id, resource_type, topic_id, metric_type,
+    #  dataset_id, bq_project_id, start_offset_minutes, end_offset_minutes)
+
+    targets = [
+        (
+            "trmc-11393281-ihubeucd1-dev",
+            "ps",
+            "esp_uk_test",
+            "pubsub.googleapis.com/topic/send_message_operation_count",
+            "SMART_ANALYTICS_DEV",
+            "trmc-12462064-observehub-dev",
+            -120,   # from now -120 minutes
+            600,    # to now +600 minutes
+        )
+    ]
+
+    for t in targets:
+        forecast_window_and_store(*t)
