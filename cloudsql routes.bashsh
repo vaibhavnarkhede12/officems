@@ -1,16 +1,23 @@
 from google.cloud import monitoring_v3, bigquery, storage
 from datetime import datetime, timedelta, timezone
 import pandas as pd
-import itertools, time, pickle
+import itertools, time, pickle, os
 
-# =============================================================================
+# ============================================================
+# CONFIG
+# ============================================================
+
+MODEL_BUCKET = "trmc-12462064-observehub-dev-smart-analytics"
+
+# ============================================================
 # BigQuery helpers
-# =============================================================================
+# ============================================================
 
-def ensure_bq_table(bq_project_id: str, dataset_id: str, table_name: str):
+def ensure_bq_table(bq_project_id, dataset_id, table_name):
     client = bigquery.Client(project=bq_project_id)
+
     dataset_ref = f"{bq_project_id}.{dataset_id}"
-    table_ref = f"{bq_project_id}.{dataset_id}.{table_name}"
+    table_ref = f"{dataset_ref}.{table_name}"
 
     try:
         client.get_dataset(dataset_ref)
@@ -28,29 +35,29 @@ def ensure_bq_table(bq_project_id: str, dataset_id: str, table_name: str):
         table.time_partitioning = bigquery.TimePartitioning(field="ds")
         client.create_table(table)
 
-# =============================================================================
-# Metric fetch
-# =============================================================================
+# ============================================================
+# Fetch metric + write to BQ
+# ============================================================
 
-def fetch_pubsub_topic_send_count(
-    metric_project_id: str,
-    topic_id: str,
-    metric_type: str,
-    bq_project_id: str,
-    dataset_id: str,
-    table_name: str,
-    lookback_hours: int
+def fetch_pubsub_metric(
+    metric_project_id,
+    topic_id,
+    metric_type,
+    bq_project_id,
+    dataset_id,
+    table_name,
+    lookback_hours,
 ):
-    metric_client = monitoring_v3.MetricServiceClient()
+    client = monitoring_v3.MetricServiceClient()
 
     now = datetime.now(timezone.utc)
     interval = monitoring_v3.TimeInterval(
-        end_time=now,
         start_time=now - timedelta(hours=lookback_hours),
+        end_time=now,
     )
 
     aggregation = monitoring_v3.Aggregation(
-        alignment_period={"seconds": 60},  # ✅ FORCE 1 MIN
+        alignment_period={"seconds": 60},
         per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_SUM,
     )
 
@@ -60,7 +67,7 @@ def fetch_pubsub_topic_send_count(
         f'resource.labels.topic_id="{topic_id}"'
     )
 
-    results = metric_client.list_time_series(
+    results = client.list_time_series(
         request={
             "name": f"projects/{metric_project_id}",
             "filter": metric_filter,
@@ -69,94 +76,179 @@ def fetch_pubsub_topic_send_count(
         }
     )
 
-    rows = []
+    data = {}
+
     for ts in results:
         for p in ts.points:
-            raw = p.interval.end_time
-            ds = datetime(
-                raw.year, raw.month, raw.day,
-                raw.hour, raw.minute, 0, tzinfo=timezone.utc
+            t = p.interval.end_time
+            ts_utc = datetime(
+                t.year, t.month, t.day,
+                t.hour, t.minute, tzinfo=timezone.utc
             )
-            y = p.value.int64_value or int(p.value.double_value)
-            rows.append({"ds": ds, "y": y})
+            val = p.value.int64_value or int(p.value.double_value)
+            data[ts_utc] = data.get(ts_utc, 0) + val
 
-    if not rows:
-        print("No metric data.")
-        return None
-
-    df = pd.DataFrame(rows)
-    df = df.groupby("ds", as_index=False)["y"].sum()  # safety
+    if not data:
+        print("No metric data found")
+        return False
 
     ensure_bq_table(bq_project_id, dataset_id, table_name)
 
+    rows = [{"ds": k.isoformat(), "y": int(v)} for k, v in sorted(data.items())]
+
     bq = bigquery.Client(project=bq_project_id)
-    bq.load_table_from_dataframe(
-        df,
+    bq.load_table_from_json(
+        rows,
         f"{bq_project_id}.{dataset_id}.{table_name}",
-        job_config=bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE"),
+        job_config=bigquery.LoadJobConfig(
+            write_disposition="WRITE_TRUNCATE"
+        ),
     ).result()
 
-    return df
+    print(f"Inserted {len(rows)} rows into {table_name}")
+    return True
 
-# =============================================================================
-# SARIMAX training
-# =============================================================================
+# ============================================================
+# Train SARIMAX and upload model
+# ============================================================
 
-def train_sarimax_from_bq_and_store(
-    bq_project_id: str,
-    dataset_id: str,
-    table_name: str,
-    max_models: int,
-    max_seconds: int,
-    storage_project_id: str
+def train_and_store_model(
+    bq_project_id,
+    dataset_id,
+    table_name,
+    SEASON_M,
+    MAX_MODELS,
+    MAX_SECONDS,
+    storage_project_id,
 ):
     from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-    MODEL_BUCKET = "trmc-12462064-observehub-dev-smart-analytics"
-
     bq = bigquery.Client(project=bq_project_id)
     df = bq.query(
-        f"SELECT ds, y FROM `{bq_project_id}.{dataset_id}.{table_name}` ORDER BY ds"
+        f"""
+        SELECT ds, y
+        FROM `{bq_project_id}.{dataset_id}.{table_name}`
+        ORDER BY ds
+        """
     ).to_dataframe()
 
+    if df.empty:
+        print("No data to train")
+        return
+
     df["ds"] = pd.to_datetime(df["ds"], utc=True)
-    df = df.set_index("ds").asfreq("min")  # ✅ CRITICAL
-    s = df["y"].astype(float)
+    s = df.set_index("ds").asfreq("min")["y"].astype(float)
 
     best_aic = float("inf")
-    best_res = None
+    best_model = None
+
+    p_vals = [0, 1, 2]
+    d_vals = [0, 1]
+    q_vals = [0, 1, 2]
+
+    P_vals = [0, 1] if SEASON_M > 0 else [0]
+    D_vals = [0, 1] if SEASON_M > 0 else [0]
+    Q_vals = [0, 1] if SEASON_M > 0 else [0]
 
     start = time.time()
     attempts = 0
 
-    for p, d, q in itertools.product([0,1,2], [0,1], [0,1,2]):
-        if attempts >= max_models or time.time() - start > max_seconds:
+    for p, d, q, P, D, Q in itertools.product(
+        p_vals, d_vals, q_vals, P_vals, D_vals, Q_vals
+    ):
+        if attempts >= MAX_MODELS or time.time() - start > MAX_SECONDS:
             break
+
         try:
-            res = SARIMAX(
+            model = SARIMAX(
                 s,
-                order=(p,d,q),
+                order=(p, d, q),
+                seasonal_order=(P, D, Q, SEASON_M) if SEASON_M else (0, 0, 0, 0),
                 enforce_stationarity=False,
                 enforce_invertibility=False,
-            ).fit(disp=False)
+            )
+
+            res = model.fit(disp=False)
             attempts += 1
 
             if res.aic < best_aic:
                 best_aic = res.aic
-                best_res = res
+                best_model = res
+
         except Exception:
             attempts += 1
 
-    if best_res is None:
-        print("No model fit.")
+    if best_model is None:
+        print("Model training failed")
         return
 
     local_path = f"{table_name}.pkl"
-    best_res.save(local_path)  # ✅ NOT PICKLE
+    best_model.save(local_path)
 
-    storage.Client(storage_project_id)\
-        .bucket(MODEL_BUCKET)\
-        .blob(local_path)\
+    storage.Client(storage_project_id) \
+        .bucket(MODEL_BUCKET) \
+        .blob(local_path) \
         .upload_from_filename(local_path)
 
+    os.remove(local_path)
+
     print(f"Model stored: AIC={best_aic:.2f}")
+
+# ============================================================
+# MAIN
+# ============================================================
+
+if __name__ == "__main__":
+
+    targets = [
+        (
+            "trmc-11393281-ihubecdl-dev",
+            "ps",
+            "esp_uk_test",
+            "pubsub.googleapis.com/topic/send_message_operation_count",
+            "SMART_ANALYTICS_DEV",
+            "trmc-12462064-observehub-dev",
+            96,
+            50,
+            300,
+            0,     # SEASON_M
+        )
+    ]
+
+    for (
+        metric_project,
+        resource_type,
+        topic,
+        metric_type,
+        dataset_id,
+        bq_project,
+        lookback,
+        MAX_MODELS,
+        MAX_SECONDS,
+        SEASON_M,
+    ) in targets:
+
+        table_name = (
+            f"{metric_project.replace('-', '_')}_"
+            f"{resource_type}_"
+            f"{topic.replace('-', '_')}_send_message_operation_count"
+        )
+
+        if fetch_pubsub_metric(
+            metric_project,
+            topic,
+            metric_type,
+            bq_project,
+            dataset_id,
+            table_name,
+            lookback,
+        ):
+            train_and_store_model(
+                bq_project,
+                dataset_id,
+                table_name,
+                SEASON_M,
+                MAX_MODELS,
+                MAX_SECONDS,
+                bq_project,
+            )
