@@ -1,4 +1,8 @@
 sudo -i && \
+parted -s /dev/sda mkpart primary 60G 100% && \
+parted -s /dev/sda set 4 lvm on && \
+pvcreate /dev/sda4 && \
+vgextend vg00 /dev/sda4 && \
 vgs && \
 lvcreate -L 200G -n lv_tmp vg00 && \
 mkfs.xfs /dev/vg00/lv_tmp && \
