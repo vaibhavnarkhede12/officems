@@ -1,76 +1,28 @@
-from google.cloud import bigquery, storage
-import pandas as pd
+import tempfile
+import os
+from google.cloud import storage
 from statsmodels.tsa.statespace.sarimax import SARIMAXResults
 
 MODEL_BUCKET = "trmc-12462064-observehub-dev-smart-analytics"
 
-def load_model(project_id, table_name):
+def load_model(project_id: str, table_name: str) -> SARIMAXResults:
     client = storage.Client(project=project_id)
-    blob = client.bucket(MODEL_BUCKET).blob(f"{table_name}.pkl")
+    bucket = client.bucket(MODEL_BUCKET)
+    blob = bucket.blob(f"{table_name}.pkl")
 
     if not blob.exists():
-        raise FileNotFoundError("Model not found")
-
-    return SARIMAXResults.load(blob.download_as_bytes())
-
-def forecast_and_store(
-    metric_project_id,
-    resource_type,
-    topic_id,
-    dataset_id,
-    bq_project_id,
-    start_offset_min,
-    end_offset_min,
-):
-    table_name = (
-        f"{metric_project_id.replace('-', '_')}_"
-        f"{resource_type}_"
-        f"{topic_id.replace('-', '_')}_send_message_operation_count"
-    )
-
-    forecast_table = f"{table_name}_forecast"
-    model = load_model(bq_project_id, table_name)
-
-    now = pd.Timestamp.utcnow().floor("min")
-    start_ts = now + pd.Timedelta(minutes=start_offset_min)
-    end_ts = now + pd.Timedelta(minutes=end_offset_min)
-
-    steps = int((end_ts - start_ts).total_seconds() // 60)
-    if steps <= 0:
-        print("Invalid forecast window")
-        return
-
-    fc = model.get_forecast(steps=steps)
-    index = pd.date_range(start=start_ts, periods=steps, freq="min", tz="UTC")
-
-    df = pd.DataFrame(
-        {"ds": index, "y": fc.predicted_mean.clip(lower=0)}
-    )
-
-    bq = bigquery.Client(project=bq_project_id)
-    bq.load_table_from_dataframe(
-        df,
-        f"{bq_project_id}.{dataset_id}.{forecast_table}",
-        job_config=bigquery.LoadJobConfig(
-            write_disposition="WRITE_TRUNCATE"
-        ),
-    ).result()
-
-    print(f"Wrote {len(df)} forecast rows")
-
-if __name__ == "__main__":
-
-    targets = [
-        (
-            "trmc-11393281-ihubeucd1-dev",
-            "ps",
-            "esp_uk_test",
-            "SMART_ANALYTICS_DEV",
-            "trmc-12462064-observehub-dev",
-            -120,
-            600,
+        raise FileNotFoundError(
+            f"Model gs://{MODEL_BUCKET}/{table_name}.pkl not found"
         )
-    ]
 
-    for t in targets:
-        forecast_and_store(*t)
+    # ✅ Write to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp:
+        blob.download_to_filename(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        model = SARIMAXResults.load(tmp_path)
+    finally:
+        os.remove(tmp_path)
+
+    return model
