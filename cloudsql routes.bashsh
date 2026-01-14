@@ -1,5 +1,5 @@
-import tempfile
 import os
+import tempfile
 from google.cloud import storage
 from statsmodels.tsa.statespace.sarimax import SARIMAXResults
 
@@ -15,7 +15,7 @@ def load_model(project_id: str, table_name: str) -> SARIMAXResults:
             f"Model gs://{MODEL_BUCKET}/{table_name}.pkl not found"
         )
 
-    # ✅ Write to temp file
+    # Download model to a temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp:
         blob.download_to_filename(tmp.name)
         tmp_path = tmp.name
