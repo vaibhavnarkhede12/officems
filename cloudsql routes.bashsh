@@ -1,31 +1,9 @@
-import os
-from google.cloud import storage
-from statsmodels.tsa.statespace.sarimax import SARIMAXResults
-
-MODEL_BUCKET = "trmc-12462064-observehub-dev-smart-analytics"
-
-def load_model(project_id: str, table_name: str) -> SARIMAXResults:
-    client = storage.Client(project=project_id)
-    bucket = client.bucket(MODEL_BUCKET)
-    blob = bucket.blob(f"{table_name}.pkl")
-
-    if not blob.exists():
-        raise FileNotFoundError(
-            f"Model gs://{MODEL_BUCKET}/{table_name}.pkl not found"
-        )
-
-    # Use a fixed local file
-    local_path = f"/tmp/{table_name}.pkl"
-
-    blob.download_to_filename(local_path)
-
-    try:
-        model = SARIMAXResults.load(local_path)
-    finally:
-        # Optional cleanup
-        try:
-            os.remove(local_path)
-        except Exception:
-            pass
-
-    return model
+sudo -i && \
+vgs && \
+lvcreate -L 200G -n lv_tmp vg00 && \
+mkfs.xfs /dev/vg00/lv_tmp && \
+umount /tmp && \
+mount /dev/vg00/lv_tmp /tmp && \
+echo '/dev/mapper/vg00-lv_tmp /tmp xfs defaults,nodev,nosuid,noexec 0 0' >> /etc/fstab && \
+mount -a && \
+df -h /tmp
