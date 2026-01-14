@@ -1,254 +1,76 @@
-from google.cloud import monitoring_v3, bigquery, storage
-from datetime import datetime, timedelta, timezone
+from google.cloud import bigquery, storage
 import pandas as pd
-import itertools, time, pickle, os
-
-# ============================================================
-# CONFIG
-# ============================================================
+from statsmodels.tsa.statespace.sarimax import SARIMAXResults
 
 MODEL_BUCKET = "trmc-12462064-observehub-dev-smart-analytics"
 
-# ============================================================
-# BigQuery helpers
-# ============================================================
+def load_model(project_id, table_name):
+    client = storage.Client(project=project_id)
+    blob = client.bucket(MODEL_BUCKET).blob(f"{table_name}.pkl")
 
-def ensure_bq_table(bq_project_id, dataset_id, table_name):
-    client = bigquery.Client(project=bq_project_id)
+    if not blob.exists():
+        raise FileNotFoundError("Model not found")
 
-    dataset_ref = f"{bq_project_id}.{dataset_id}"
-    table_ref = f"{dataset_ref}.{table_name}"
+    return SARIMAXResults.load(blob.download_as_bytes())
 
-    try:
-        client.get_dataset(dataset_ref)
-    except Exception:
-        client.create_dataset(bigquery.Dataset(dataset_ref))
-
-    try:
-        client.get_table(table_ref)
-    except Exception:
-        schema = [
-            bigquery.SchemaField("ds", "TIMESTAMP"),
-            bigquery.SchemaField("y", "INT64"),
-        ]
-        table = bigquery.Table(table_ref, schema=schema)
-        table.time_partitioning = bigquery.TimePartitioning(field="ds")
-        client.create_table(table)
-
-# ============================================================
-# Fetch metric + write to BQ
-# ============================================================
-
-def fetch_pubsub_metric(
+def forecast_and_store(
     metric_project_id,
+    resource_type,
     topic_id,
-    metric_type,
-    bq_project_id,
     dataset_id,
-    table_name,
-    lookback_hours,
+    bq_project_id,
+    start_offset_min,
+    end_offset_min,
 ):
-    client = monitoring_v3.MetricServiceClient()
-
-    now = datetime.now(timezone.utc)
-    interval = monitoring_v3.TimeInterval(
-        start_time=now - timedelta(hours=lookback_hours),
-        end_time=now,
+    table_name = (
+        f"{metric_project_id.replace('-', '_')}_"
+        f"{resource_type}_"
+        f"{topic_id.replace('-', '_')}_send_message_operation_count"
     )
 
-    aggregation = monitoring_v3.Aggregation(
-        alignment_period={"seconds": 60},
-        per_series_aligner=monitoring_v3.Aggregation.Aligner.ALIGN_SUM,
+    forecast_table = f"{table_name}_forecast"
+    model = load_model(bq_project_id, table_name)
+
+    now = pd.Timestamp.utcnow().floor("min")
+    start_ts = now + pd.Timedelta(minutes=start_offset_min)
+    end_ts = now + pd.Timedelta(minutes=end_offset_min)
+
+    steps = int((end_ts - start_ts).total_seconds() // 60)
+    if steps <= 0:
+        print("Invalid forecast window")
+        return
+
+    fc = model.get_forecast(steps=steps)
+    index = pd.date_range(start=start_ts, periods=steps, freq="min", tz="UTC")
+
+    df = pd.DataFrame(
+        {"ds": index, "y": fc.predicted_mean.clip(lower=0)}
     )
-
-    metric_filter = (
-        f'metric.type="{metric_type}" AND '
-        f'resource.type="pubsub_topic" AND '
-        f'resource.labels.topic_id="{topic_id}"'
-    )
-
-    results = client.list_time_series(
-        request={
-            "name": f"projects/{metric_project_id}",
-            "filter": metric_filter,
-            "interval": interval,
-            "aggregation": aggregation,
-        }
-    )
-
-    data = {}
-
-    for ts in results:
-        for p in ts.points:
-            t = p.interval.end_time
-            ts_utc = datetime(
-                t.year, t.month, t.day,
-                t.hour, t.minute, tzinfo=timezone.utc
-            )
-            val = p.value.int64_value or int(p.value.double_value)
-            data[ts_utc] = data.get(ts_utc, 0) + val
-
-    if not data:
-        print("No metric data found")
-        return False
-
-    ensure_bq_table(bq_project_id, dataset_id, table_name)
-
-    rows = [{"ds": k.isoformat(), "y": int(v)} for k, v in sorted(data.items())]
 
     bq = bigquery.Client(project=bq_project_id)
-    bq.load_table_from_json(
-        rows,
-        f"{bq_project_id}.{dataset_id}.{table_name}",
+    bq.load_table_from_dataframe(
+        df,
+        f"{bq_project_id}.{dataset_id}.{forecast_table}",
         job_config=bigquery.LoadJobConfig(
             write_disposition="WRITE_TRUNCATE"
         ),
     ).result()
 
-    print(f"Inserted {len(rows)} rows into {table_name}")
-    return True
-
-# ============================================================
-# Train SARIMAX and upload model
-# ============================================================
-
-def train_and_store_model(
-    bq_project_id,
-    dataset_id,
-    table_name,
-    SEASON_M,
-    MAX_MODELS,
-    MAX_SECONDS,
-    storage_project_id,
-):
-    from statsmodels.tsa.statespace.sarimax import SARIMAX
-
-    bq = bigquery.Client(project=bq_project_id)
-    df = bq.query(
-        f"""
-        SELECT ds, y
-        FROM `{bq_project_id}.{dataset_id}.{table_name}`
-        ORDER BY ds
-        """
-    ).to_dataframe()
-
-    if df.empty:
-        print("No data to train")
-        return
-
-    df["ds"] = pd.to_datetime(df["ds"], utc=True)
-    s = df.set_index("ds").asfreq("min")["y"].astype(float)
-
-    best_aic = float("inf")
-    best_model = None
-
-    p_vals = [0, 1, 2]
-    d_vals = [0, 1]
-    q_vals = [0, 1, 2]
-
-    P_vals = [0, 1] if SEASON_M > 0 else [0]
-    D_vals = [0, 1] if SEASON_M > 0 else [0]
-    Q_vals = [0, 1] if SEASON_M > 0 else [0]
-
-    start = time.time()
-    attempts = 0
-
-    for p, d, q, P, D, Q in itertools.product(
-        p_vals, d_vals, q_vals, P_vals, D_vals, Q_vals
-    ):
-        if attempts >= MAX_MODELS or time.time() - start > MAX_SECONDS:
-            break
-
-        try:
-            model = SARIMAX(
-                s,
-                order=(p, d, q),
-                seasonal_order=(P, D, Q, SEASON_M) if SEASON_M else (0, 0, 0, 0),
-                enforce_stationarity=False,
-                enforce_invertibility=False,
-            )
-
-            res = model.fit(disp=False)
-            attempts += 1
-
-            if res.aic < best_aic:
-                best_aic = res.aic
-                best_model = res
-
-        except Exception:
-            attempts += 1
-
-    if best_model is None:
-        print("Model training failed")
-        return
-
-    local_path = f"{table_name}.pkl"
-    best_model.save(local_path)
-
-    storage.Client(storage_project_id) \
-        .bucket(MODEL_BUCKET) \
-        .blob(local_path) \
-        .upload_from_filename(local_path)
-
-    os.remove(local_path)
-
-    print(f"Model stored: AIC={best_aic:.2f}")
-
-# ============================================================
-# MAIN
-# ============================================================
+    print(f"Wrote {len(df)} forecast rows")
 
 if __name__ == "__main__":
 
     targets = [
         (
-            "trmc-11393281-ihubecdl-dev",
+            "trmc-11393281-ihubeucd1-dev",
             "ps",
             "esp_uk_test",
-            "pubsub.googleapis.com/topic/send_message_operation_count",
             "SMART_ANALYTICS_DEV",
             "trmc-12462064-observehub-dev",
-            96,
-            50,
-            300,
-            0,     # SEASON_M
+            -120,
+            600,
         )
     ]
 
-    for (
-        metric_project,
-        resource_type,
-        topic,
-        metric_type,
-        dataset_id,
-        bq_project,
-        lookback,
-        MAX_MODELS,
-        MAX_SECONDS,
-        SEASON_M,
-    ) in targets:
-
-        table_name = (
-            f"{metric_project.replace('-', '_')}_"
-            f"{resource_type}_"
-            f"{topic.replace('-', '_')}_send_message_operation_count"
-        )
-
-        if fetch_pubsub_metric(
-            metric_project,
-            topic,
-            metric_type,
-            bq_project,
-            dataset_id,
-            table_name,
-            lookback,
-        ):
-            train_and_store_model(
-                bq_project,
-                dataset_id,
-                table_name,
-                SEASON_M,
-                MAX_MODELS,
-                MAX_SECONDS,
-                bq_project,
-            )
+    for t in targets:
+        forecast_and_store(*t)
