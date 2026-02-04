@@ -2,6 +2,10 @@ import ssl
 import certifi
 import urllib.request
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+
 print("Using cert file:", certifi.where())
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
