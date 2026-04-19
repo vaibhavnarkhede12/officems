@@ -1,1 +1,18 @@
 https://api.github.com/repos/{{$json.repo}}/git/trees/HEAD?recursive=1
+
+
+Use this to read the raw contents of a specific file in a GitHub repo.
+Input: full path like "owner/repo/branch/filepath" 
+e.g., "vercel/next.js/main/package.json"
+Returns the raw file text content.
+
+
+https://raw.githubusercontent.com/{{$json.path}}
+
+
+const url = $input.first().json.chatInput;
+const match = url.match(/github\.com\/([^\/]+\/[^\/\s]+)/);
+const repo = match ? match[1].replace(/\.git$/, '') : url;
+return [{ json: { repo, originalMessage: url } }];
+
+
