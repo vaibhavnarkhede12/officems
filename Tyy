@@ -1,55 +1,43 @@
-SELECT
-    relname AS table_name,
-    n_live_tup AS row_count
-FROM pg_stat_user_tables
-WHERE schemaname = 'public'
-ORDER BY relname;
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from datetime import datetime
 
+# -----------------------------
+# Airflow DAG to clone a GitHub repository
+# -----------------------------
 
-SELECT
-    'SELECT ''' || table_name || ''' AS table_name, COUNT(*) FROM public.' || table_name
-FROM information_schema.tables
-WHERE table_schema = 'public'
-AND table_type = 'BASE TABLE';
+default_args = {
+    "owner": "airflow",
+    "depends_on_past": False,
+    "retries": 1,
+}
 
+with DAG(
+    dag_id="clone_github_repo",
+    default_args=default_args,
+    description="Clone a Git repository using Airflow",
+    schedule="@daily",   # Runs daily
+    start_date=datetime(2025, 1, 1),
+    catchup=False,
+    tags=["git", "github"],
+) as dag:
 
-SELECT 'table1' AS table_name, COUNT(*) FROM public.table1
-UNION ALL
-SELECT 'table2', COUNT(*) FROM public.table2
-UNION ALL
-SELECT 'table3', COUNT(*) FROM public.table3;
+    clone_repo = BashOperator(
+        task_id="clone_repo",
+        bash_command="""
+        REPO_URL="https://github.com/apache/airflow.git"
+        TARGET_DIR="/tmp/airflow_repo"
 
+        echo "Cleaning old repo if exists..."
+        rm -rf $TARGET_DIR
 
+        echo "Cloning repository..."
+        git clone $REPO_URL $TARGET_DIR
 
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR r IN
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_type = 'BASE TABLE'
-    LOOP
-        EXECUTE format(
-            'SELECT ''%s'' AS table_name, COUNT(*) AS row_count FROM public.%I',
-            r.table_name,
-            r.table_name
-        );
-    END LOOP;
-END $$;
+        echo "Repository cloned successfully"
+        """,
+    )
 
-SELECT
-    table_name,
-    (xpath('/row/count/text()',
-        query_to_xml(
-            format('SELECT COUNT(*) AS count FROM public.%I', table_name),
-            false, true, ''
-        )
-    ))[1]::text::bigint AS row_count
-FROM information_schema.tables
-WHERE table_schema = 'public'
-AND table_type = 'BASE TABLE'
-ORDER BY table_name;
-
-
+    list_files = BashOperator(
+        task_id="list_repo_files",
+        bash_command="""
