@@ -13,4 +13,9 @@ return [{
     branch: 'main',   // change to 'master' if needed
     chatInput: input
   }
+
+
+gcloud sql instances patch psql-eu-west2-d1-esp-fd-clone --tier=db-perf-optimized-N-4 --database-flags=shared_buffers=0,cloudsql.iam_authentication=on --project=hsbc-11393281-ihubeucd1-dev
+
+
 }];
